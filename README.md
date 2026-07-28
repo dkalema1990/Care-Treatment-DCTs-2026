@@ -72,7 +72,13 @@ Opens at `http://localhost:8501`. The first submission will auto-create the
 
 ## How the app works
 
-- **Sidebar**: facility name, org unit code, reporting period, entered by.
+- **Sidebar**: facility name (dropdown, sourced from a `facilities` tab in your
+  Google Sheet), org unit code (auto-filled), reporting period, entered by.
+- **Facility list**: the app auto-creates a `facilities` tab in your Sheet the
+  first time it runs, with columns `facility_name` and `org_unit`. Add or edit
+  rows there any time to change what shows up in the dropdown — no code
+  changes needed. The app caches the list for 5 minutes; use the "Refresh
+  facility list" button in the sidebar to pick up changes immediately.
 - **Data entry tab**: one sub-tab per indicator sheet (TX_ML, TX_CURR, TX_NEW,
   TX_PVLS, TX_RTT, DSDM VLC/VLS). Each disaggregation is an editable
   spreadsheet-style grid.
