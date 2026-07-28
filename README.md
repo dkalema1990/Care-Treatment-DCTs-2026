@@ -103,6 +103,8 @@ Opens at `http://localhost:8501`. The first submission will auto-create the
 
 - `app.py` — the full app
 - `requirements.txt` — Python dependencies
+- `assets/logo.png` — your organisation's logo, shown in the sidebar, on the
+  sign-in page, and as the browser tab icon
 - `.streamlit/secrets.toml.example` — template for your Google credentials
   (copy to `secrets.toml` and fill in; never commit the real one)
 
