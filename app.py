@@ -35,6 +35,7 @@ SUBMISSIONS_HEADER = ["submission_id", "facility", "org_unit", "period",
                        "entered_by", "submitted_at"]
 ENTRIES_HEADER = ["submission_id", "sheet", "table_name", "row_label",
                    "col_label", "value"]
+FACILITIES_HEADER = ["facility_name", "org_unit"]
 
 # ---------------------------------------------------------------------------
 # Reference lists (mirrors the disaggregations in DCTs_2026.xlsx)
@@ -111,7 +112,7 @@ def get_spreadsheet():
 
 
 def init_db():
-    """Ensure the 'submissions' and 'entries' worksheets exist with headers."""
+    """Ensure the 'submissions', 'entries', and 'facilities' worksheets exist with headers."""
     sh = get_spreadsheet()
     existing = {ws.title for ws in sh.worksheets()}
     if "submissions" not in existing:
@@ -120,6 +121,22 @@ def init_db():
     if "entries" not in existing:
         ws = sh.add_worksheet(title="entries", rows=5000, cols=len(ENTRIES_HEADER))
         ws.append_row(ENTRIES_HEADER)
+    if "facilities" not in existing:
+        ws = sh.add_worksheet(title="facilities", rows=200, cols=len(FACILITIES_HEADER))
+        ws.append_row(FACILITIES_HEADER)
+        ws.append_row(["Example Health Centre IV", "EX001"])
+
+
+@st.cache_data(ttl=300, show_spinner=False)
+def load_facilities():
+    """Read the facility list from the 'facilities' tab. Cached 5 min so the
+    Sheet can be edited without a code change; use the Refresh button to
+    pick up changes sooner."""
+    sh = get_spreadsheet()
+    records = sh.worksheet("facilities").get_all_records()
+    df = pd.DataFrame(records, columns=FACILITIES_HEADER)
+    df = df[df["facility_name"].astype(str).str.strip() != ""]
+    return df
 
 
 def save_submission(meta: dict, tables: dict):
@@ -205,8 +222,29 @@ st.caption(
 
 with st.sidebar:
     st.header("Reporting details")
-    facility = st.text_input("Facility name")
-    org_unit = st.text_input("Org unit / facility code")
+
+    facilities_df = load_facilities()
+    if facilities_df.empty:
+        st.warning(
+            "No facilities found in the 'facilities' tab of the Google Sheet. "
+            "Add rows there (facility_name, org_unit) then hit Refresh."
+        )
+        facility = st.text_input("Facility name")
+        org_unit = st.text_input("Org unit / facility code")
+    else:
+        facility = st.selectbox(
+            "Facility name", options=facilities_df["facility_name"].tolist()
+        )
+        matched_unit = facilities_df.loc[
+            facilities_df["facility_name"] == facility, "org_unit"
+        ]
+        org_unit = matched_unit.iloc[0] if not matched_unit.empty else ""
+        st.caption(f"Org unit: {org_unit or '(none set)'}")
+
+    if st.button("\U0001F504 Refresh facility list"):
+        load_facilities.clear()
+        st.rerun()
+
     period = st.text_input("Reporting period (e.g. 2026-Q2 or July 2026)",
                             value=date.today().strftime("%Y-%m"))
     entered_by = st.text_input("Entered by")
