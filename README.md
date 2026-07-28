@@ -106,6 +106,23 @@ Opens at `http://localhost:8501`. The first submission will auto-create the
 - `.streamlit/secrets.toml.example` — template for your Google credentials
   (copy to `secrets.toml` and fill in; never commit the real one)
 
+## Data quality checks
+
+On submit, the app validates the entered data before saving:
+
+**Blocks submission (must be fixed):**
+- Facility name and reporting period are required
+- TX_PVLS: Suppressed cannot exceed Tested, and Tested cannot exceed Eligible
+  (checked per age band and sex)
+- DSDM VLC/VLS: same Suppressed \u2264 Tested \u2264 Eligible check, per age band and model
+
+**Warns, but lets you confirm and submit anyway:**
+- TX_NEW total greater than TX_CURR total (unusual \u2014 newly enrolled clients
+  are normally a subset of everyone currently on ART)
+- TX_PVLS Eligible total greater than TX_CURR total
+- Any table left entirely at zero (easy to miss a whole section by accident)
+- "Entered by" left blank
+
 ## Security note
 
 Passwords are stored as salted SHA-256 hashes in the `users` tab (never in
