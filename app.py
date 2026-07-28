@@ -18,6 +18,8 @@ Run with:
     streamlit run app.py
 """
 
+import hashlib
+import secrets as pysecrets
 import uuid
 from datetime import datetime, date
 
@@ -36,6 +38,8 @@ SUBMISSIONS_HEADER = ["submission_id", "facility", "org_unit", "period",
 ENTRIES_HEADER = ["submission_id", "sheet", "table_name", "row_label",
                    "col_label", "value"]
 FACILITIES_HEADER = ["facility_name", "org_unit"]
+USERS_HEADER = ["username", "salt", "password_hash", "full_name", "role"]
+DEFAULT_ADMIN_PASSWORD = "Admin@123"
 
 # ---------------------------------------------------------------------------
 # Reference lists (mirrors the disaggregations in DCTs_2026.xlsx)
@@ -112,7 +116,7 @@ def get_spreadsheet():
 
 
 def init_db():
-    """Ensure the 'submissions', 'entries', and 'facilities' worksheets exist with headers."""
+    """Ensure the 'submissions', 'entries', 'facilities', and 'users' worksheets exist."""
     sh = get_spreadsheet()
     existing = {ws.title for ws in sh.worksheets()}
     if "submissions" not in existing:
@@ -125,6 +129,45 @@ def init_db():
         ws = sh.add_worksheet(title="facilities", rows=200, cols=len(FACILITIES_HEADER))
         ws.append_row(FACILITIES_HEADER)
         ws.append_row(["Example Health Centre IV", "EX001"])
+    if "users" not in existing:
+        ws = sh.add_worksheet(title="users", rows=200, cols=len(USERS_HEADER))
+        ws.append_row(USERS_HEADER)
+        salt, pw_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
+        ws.append_row(["admin", salt, pw_hash, "Administrator", "admin"])
+
+
+def hash_password(password: str, salt: str = None):
+    if salt is None:
+        salt = pysecrets.token_hex(8)
+    digest = hashlib.sha256((salt + password).encode("utf-8")).hexdigest()
+    return salt, digest
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_users():
+    sh = get_spreadsheet()
+    records = sh.worksheet("users").get_all_records()
+    df = pd.DataFrame(records, columns=USERS_HEADER)
+    return df
+
+
+def authenticate(username: str, password: str):
+    users = load_users()
+    match = users[users["username"] == username]
+    if match.empty:
+        return None
+    row = match.iloc[0]
+    _, digest = hash_password(password, row["salt"])
+    if digest == row["password_hash"]:
+        return {"username": row["username"], "full_name": row["full_name"], "role": row["role"]}
+    return None
+
+
+def add_user(username: str, password: str, full_name: str, role: str):
+    sh = get_spreadsheet()
+    salt, pw_hash = hash_password(password)
+    sh.worksheet("users").append_row([username, salt, pw_hash, full_name, role])
+    load_users.clear()
 
 
 @st.cache_data(ttl=300, show_spinner=False)
@@ -213,6 +256,29 @@ def entry_grid(key, rows, columns, index_name="Disaggregation"):
 st.set_page_config(page_title="DCT 2026 Data Collection", layout="wide")
 init_db()
 
+if "auth" not in st.session_state:
+    st.session_state.auth = None
+
+if st.session_state.auth is None:
+    st.title("DCT 2026 \u2014 Sign in")
+    with st.form("login_form"):
+        u = st.text_input("Username")
+        p = st.text_input("Password", type="password")
+        submitted = st.form_submit_button("Log in", type="primary")
+    if submitted:
+        user = authenticate(u.strip(), p)
+        if user:
+            st.session_state.auth = user
+            st.rerun()
+        else:
+            st.error("Incorrect username or password.")
+    st.caption(
+        "First time here? The default admin account is username **admin**, "
+        f"password **{DEFAULT_ADMIN_PASSWORD}** — log in with that, then go to "
+        "'Manage users' to add real accounts and change this password."
+    )
+    st.stop()
+
 st.title("DCT 2026 \u2014 ART Program Data Collection Tool")
 st.caption(
     "Enter facility-level ART indicators (TX_ML, TX_CURR, TX_NEW, TX_PVLS, "
@@ -221,6 +287,12 @@ st.caption(
 )
 
 with st.sidebar:
+    st.success(f"Signed in as **{st.session_state.auth['full_name'] or st.session_state.auth['username']}**")
+    if st.button("Log out"):
+        st.session_state.auth = None
+        st.rerun()
+    st.divider()
+
     st.header("Reporting details")
 
     facilities_df = load_facilities()
@@ -249,7 +321,40 @@ with st.sidebar:
                             value=date.today().strftime("%Y-%m"))
     entered_by = st.text_input("Entered by")
     st.divider()
-    nav = st.radio("View", ["Data entry", "Submission history"])
+    nav_options = ["Data entry", "Submission history"]
+    if st.session_state.auth["role"] == "admin":
+        nav_options.append("Manage users")
+    nav = st.radio("View", nav_options)
+
+if nav == "Manage users":
+    st.subheader("Manage users")
+    st.caption("Add accounts for staff who'll be entering data. Only admins can see this page.")
+    with st.form("add_user_form", clear_on_submit=True):
+        col_a, col_b = st.columns(2)
+        new_username = col_a.text_input("Username")
+        new_password = col_b.text_input("Temporary password", type="password")
+        new_full_name = col_a.text_input("Full name")
+        new_role = col_b.selectbox("Role", ["user", "admin"])
+        add_submitted = st.form_submit_button("Add user", type="primary")
+    if add_submitted:
+        existing_users = load_users()
+        if not new_username or not new_password:
+            st.error("Username and password are required.")
+        elif new_username in existing_users["username"].values:
+            st.error("That username already exists.")
+        else:
+            add_user(new_username, new_password, new_full_name, new_role)
+            st.success(f"User '{new_username}' added.")
+            st.rerun()
+
+    st.markdown("**Existing users**")
+    users_display = load_users()[["username", "full_name", "role"]]
+    st.dataframe(users_display, use_container_width=True, hide_index=True)
+    st.caption(
+        "To remove or reset a user, edit the 'users' tab directly in the Google "
+        "Sheet (delete their row to remove access)."
+    )
+    st.stop()
 
 if nav == "Submission history":
     st.subheader("Past submissions")
