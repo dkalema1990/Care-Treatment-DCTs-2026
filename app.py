@@ -413,13 +413,21 @@ def run_quality_checks(tables: dict, meta: dict):
 # App
 # ---------------------------------------------------------------------------
 
-st.set_page_config(page_title="DCT 2026 Data Collection", layout="wide")
+LOGO_PATH = "assets/logo.png"
+
+st.set_page_config(page_title="DCT 2026 Data Collection", page_icon=LOGO_PATH, layout="wide")
 init_db()
+
+try:
+    st.logo(LOGO_PATH, size="large")
+except Exception:
+    pass
 
 if "auth" not in st.session_state:
     st.session_state.auth = None
 
 if st.session_state.auth is None:
+    st.image(LOGO_PATH, width=220)
     st.title("DCT 2026 \u2014 Sign in")
     with st.form("login_form"):
         u = st.text_input("Username")
