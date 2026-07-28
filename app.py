@@ -242,7 +242,8 @@ def entry_grid(key, rows, columns, index_name="Disaggregation"):
         use_container_width=True,
         num_rows="fixed",
         column_config={
-            c: st.column_config.NumberColumn(c, min_value=0, step=1, format="%d")
+            c: st.column_config.NumberColumn(c, min_value=0, step=1, format="%d",
+                                              alignment="center")
             for c in columns
         },
     )
