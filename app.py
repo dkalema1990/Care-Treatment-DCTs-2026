@@ -326,6 +326,34 @@ def run_quality_checks(tables: dict, meta: dict):
     except KeyError:
         pass
 
+    # --- MMD (ARV dispensing quantity) must reconcile with TX_CURR, by <15/15+ ---
+    try:
+        txcurr_age = tables[("TX_CURR", "By age and sex")]
+        under15_ages = AGE_BANDS_15[:4]   # < 1, 1-4, 5-9, 10-14
+        over15_ages = AGE_BANDS_15[4:]    # 15-19 ... 65+
+
+        txcurr_under15 = txcurr_age.loc[under15_ages, ["Female", "Male"]].values.sum()
+        txcurr_15plus = txcurr_age.loc[over15_ages, ["Female", "Male"]].values.sum()
+
+        mmd = tables[("TX_CURR", "ARV dispensing quantity")]
+        mmd_under15 = mmd.loc[[r for r in mmd.index if "<15yrs" in r], "Total"].values.sum()
+        mmd_15plus = mmd.loc[[r for r in mmd.index if "15+yrs" in r], "Total"].values.sum()
+
+        if mmd_under15 != txcurr_under15:
+            errors.append(
+                f"MMD (<15yrs) total ({int(mmd_under15)}) does not equal TX_CURR <15yrs "
+                f"total ({int(txcurr_under15)}). Every client currently on ART should be "
+                "counted in exactly one dispensing duration category."
+            )
+        if mmd_15plus != txcurr_15plus:
+            errors.append(
+                f"MMD (15+yrs) total ({int(mmd_15plus)}) does not equal TX_CURR 15+yrs "
+                f"total ({int(txcurr_15plus)}). Every client currently on ART should be "
+                "counted in exactly one dispensing duration category."
+            )
+    except KeyError:
+        pass
+
     # --- Cross-sheet plausibility (soft warnings) ---
     try:
         txcurr_total = tables[("TX_CURR", "By age and sex")].values.sum()
