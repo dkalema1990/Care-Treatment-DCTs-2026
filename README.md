@@ -112,6 +112,9 @@ On submit, the app validates the entered data before saving:
 
 **Blocks submission (must be fixed):**
 - Facility name and reporting period are required
+- MMD (ARV dispensing quantity) totals must equal TX_CURR totals, checked
+  separately for <15yrs and 15+yrs \u2014 every client currently on ART should be
+  counted in exactly one dispensing duration category
 - TX_PVLS: Suppressed cannot exceed Tested, and Tested cannot exceed Eligible
   (checked per age band and sex)
 - DSDM VLC/VLS: same Suppressed \u2264 Tested \u2264 Eligible check, per age band and model
