@@ -72,6 +72,18 @@ Opens at `http://localhost:8501`. The first submission will auto-create the
 
 ## How the app works
 
+- **Sign in**: every user needs an account. A `users` tab is auto-created in
+  your Google Sheet on first run, seeded with one admin account:
+  - username: `admin`
+  - password: `Admin@123`
+  Log in with that first, then go to the **Manage users** page (visible only
+  to admins) to add real accounts for your team and set a new admin password
+  (add a new admin user with a password only you know, then delete the
+  default `admin` row from the `users` tab in the Sheet).
+- **Manage users** (admin only): add username/password/full name/role for
+  each person who'll enter data. Roles are `user` or `admin` — only admins
+  see the Manage users page. To remove someone's access, delete their row
+  from the `users` tab in the Sheet directly.
 - **Sidebar**: facility name (dropdown, sourced from a `facilities` tab in your
   Google Sheet), org unit code (auto-filled), reporting period, entered by.
 - **Facility list**: the app auto-creates a `facilities` tab in your Sheet the
@@ -93,6 +105,14 @@ Opens at `http://localhost:8501`. The first submission will auto-create the
 - `requirements.txt` — Python dependencies
 - `.streamlit/secrets.toml.example` — template for your Google credentials
   (copy to `secrets.toml` and fill in; never commit the real one)
+
+## Security note
+
+Passwords are stored as salted SHA-256 hashes in the `users` tab (never in
+plain text), which is reasonable for an internal team tool. It isn't
+enterprise-grade authentication (no lockouts, password resets, or MFA), so
+keep the Google Sheet itself restricted to people who should have admin-level
+trust, and change the default admin password immediately after first login.
 
 ## Troubleshooting
 
