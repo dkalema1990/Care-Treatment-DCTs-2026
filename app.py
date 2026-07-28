@@ -282,6 +282,78 @@ def current_quarter_label():
 
 
 # ---------------------------------------------------------------------------
+# Data quality checks
+# ---------------------------------------------------------------------------
+
+def run_quality_checks(tables: dict, meta: dict):
+    """Returns (errors, warnings). Errors block submission; warnings need confirmation."""
+    errors, warnings = [], []
+
+    if not meta["facility"]:
+        errors.append("Facility name is required.")
+    if not meta["period"]:
+        errors.append("Reporting period is required.")
+    if not meta["entered_by"]:
+        warnings.append("'Entered by' is blank \u2014 consider recording who filled this in.")
+
+    # --- Logical hierarchy: Suppressed <= Tested <= Eligible (TX_PVLS) ---
+    try:
+        eligible = tables[("TX_PVLS", "Eligible")]
+        tested = tables[("TX_PVLS", "Tested")]
+        suppressed = tables[("TX_PVLS", "Suppressed Viral Load")]
+        for age in eligible.index:
+            for sex in ["Female", "Male"]:
+                e, t, s = eligible.loc[age, sex], tested.loc[age, sex], suppressed.loc[age, sex]
+                if t > e:
+                    errors.append(f"TX_PVLS ({sex}, {age}): Tested ({t}) exceeds Eligible ({e}).")
+                if s > t:
+                    errors.append(f"TX_PVLS ({sex}, {age}): Suppressed ({s}) exceeds Tested ({t}).")
+    except KeyError:
+        pass
+
+    # --- Logical hierarchy: Suppressed <= Tested <= Eligible (DSDM, per model) ---
+    try:
+        d_eligible = tables[("DSDM_VLC-VLS", "Eligible")]
+        d_tested = tables[("DSDM_VLC-VLS", "Tested")]
+        d_suppressed = tables[("DSDM_VLC-VLS", "Suppressed Viral Load")]
+        for age in d_eligible.index:
+            for model in d_eligible.columns:
+                e, t, s = d_eligible.loc[age, model], d_tested.loc[age, model], d_suppressed.loc[age, model]
+                if t > e:
+                    errors.append(f"DSDM ({model}, {age}): Tested ({t}) exceeds Eligible ({e}).")
+                if s > t:
+                    errors.append(f"DSDM ({model}, {age}): Suppressed ({s}) exceeds Tested ({t}).")
+    except KeyError:
+        pass
+
+    # --- Cross-sheet plausibility (soft warnings) ---
+    try:
+        txcurr_total = tables[("TX_CURR", "By age and sex")].values.sum()
+        txnew_total = tables[("TX_NEW", "By age and sex")].values.sum()
+        if txnew_total > txcurr_total:
+            warnings.append(
+                f"TX_NEW total ({int(txnew_total)}) is greater than TX_CURR total "
+                f"({int(txcurr_total)}) \u2014 newly enrolled clients are usually a subset "
+                "of everyone currently on ART."
+            )
+        pvls_eligible_total = tables[("TX_PVLS", "Eligible")].values.sum()
+        if pvls_eligible_total > txcurr_total:
+            warnings.append(
+                f"TX_PVLS Eligible total ({int(pvls_eligible_total)}) exceeds TX_CURR total "
+                f"({int(txcurr_total)})."
+            )
+    except KeyError:
+        pass
+
+    # --- Completeness: flag sections left entirely at zero ---
+    for (sheet, table_name), df in tables.items():
+        if df.values.sum() == 0:
+            warnings.append(f"{sheet} \u2014 '{table_name}' is all zeros. Confirm this is correct, not just skipped.")
+
+    return errors, warnings
+
+
+# ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
 
@@ -515,15 +587,33 @@ col1, col2 = st.columns([1, 3])
 with col1:
     submit = st.button("Submit report", type="primary", use_container_width=True)
 
+meta = {
+    "facility": facility,
+    "org_unit": org_unit,
+    "period": period,
+    "entered_by": entered_by,
+}
+
 if submit:
-    if not facility or not period:
-        st.error("Please enter at least a facility name and reporting period in the sidebar.")
+    errors, warnings = run_quality_checks(tables, meta)
+    if errors:
+        st.error("Please fix the following before submitting:")
+        for e in errors:
+            st.markdown(f"- \u274c {e}")
+        st.session_state.pending_submission = None
+    elif warnings:
+        st.session_state.pending_submission = {"meta": meta, "tables": tables}
+        st.warning("Some things look worth double-checking:")
+        for w in warnings:
+            st.markdown(f"- \u26a0\ufe0f {w}")
     else:
-        meta = {
-            "facility": facility,
-            "org_unit": org_unit,
-            "period": period,
-            "entered_by": entered_by,
-        }
         sub_id = save_submission(meta, tables)
         st.success(f"Report submitted and saved (ID: {sub_id[:8]}).")
+        st.session_state.pending_submission = None
+
+if st.session_state.get("pending_submission"):
+    if st.button("Submit anyway, I've reviewed the warnings above", use_container_width=True):
+        pending = st.session_state.pending_submission
+        sub_id = save_submission(pending["meta"], pending["tables"])
+        st.success(f"Report submitted and saved (ID: {sub_id[:8]}).")
+        st.session_state.pending_submission = None
