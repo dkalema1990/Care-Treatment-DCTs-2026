@@ -244,13 +244,35 @@ tables = {}
 
 with tabs[0]:
     st.subheader("TX_ML \u2014 Interruption in Treatment / Outcomes")
-    st.markdown("**Outcome totals by sex**")
-    tables[("TX_ML", "Outcome totals by sex")] = entry_grid(
-        "txml_sex", TX_ML_OUTCOMES, ["Female", "Male"], "Outcome"
+    st.caption(
+        "Enter Female/Male counts by age band for each outcome. The combined "
+        "total across all outcomes, by age and sex, is calculated automatically below."
     )
-    st.markdown("**Age breakdown by outcome (Total)**")
-    tables[("TX_ML", "Age breakdown by outcome")] = entry_grid(
-        "txml_age", AGE_BANDS_15, TX_ML_OUTCOMES, "Age band"
+
+    outcome_tables = {}
+    for outcome in TX_ML_OUTCOMES:
+        st.markdown(f"**{outcome}**")
+        df = entry_grid(
+            f"txml_{outcome}", AGE_BANDS_15, ["Female", "Male"], "Age band"
+        )
+        outcome_tables[outcome] = df
+        tables[("TX_ML", outcome)] = df
+
+    # Auto-computed: combined total across all outcome sub-categories, by age & sex
+    combined = sum(outcome_tables.values())
+    combined.index.name = "Age band"
+    tables[("TX_ML", "Combined total (all outcomes) by age and sex")] = combined
+
+    st.markdown("**Combined total across all outcomes \u2014 by age and sex** _(auto-calculated)_")
+    combined_display = combined.copy()
+    combined_display["Total"] = combined_display["Female"] + combined_display["Male"]
+    st.dataframe(combined_display, use_container_width=True)
+
+    totals_row = combined[["Female", "Male"]].sum()
+    st.markdown(
+        f"**Grand total \u2014 Female: {int(totals_row['Female'])} | "
+        f"Male: {int(totals_row['Male'])} | "
+        f"Overall: {int(totals_row.sum())}**"
     )
 
 with tabs[1]:
