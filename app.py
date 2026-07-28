@@ -249,6 +249,38 @@ def entry_grid(key, rows, columns, index_name="Disaggregation"):
     return edited
 
 
+def month_options(years_back=1, years_forward=1):
+    """['January 2025', 'February 2025', ..., 'December 2027'], newest last."""
+    today = date.today()
+    start_year = today.year - years_back
+    end_year = today.year + years_forward
+    opts = []
+    for year in range(start_year, end_year + 1):
+        for m in range(1, 13):
+            opts.append(date(year, m, 1).strftime("%B %Y"))
+    return opts
+
+
+def quarter_options(years_back=1, years_forward=1):
+    """['Q1 2025 (Jan-Mar)', ..., 'Q4 2027 (Oct-Dec)']"""
+    today = date.today()
+    start_year = today.year - years_back
+    end_year = today.year + years_forward
+    labels = {1: "Jan-Mar", 2: "Apr-Jun", 3: "Jul-Sep", 4: "Oct-Dec"}
+    opts = []
+    for year in range(start_year, end_year + 1):
+        for q in range(1, 5):
+            opts.append(f"Q{q} {year} ({labels[q]})")
+    return opts
+
+
+def current_quarter_label():
+    today = date.today()
+    q = (today.month - 1) // 3 + 1
+    labels = {1: "Jan-Mar", 2: "Apr-Jun", 3: "Jul-Sep", 4: "Oct-Dec"}
+    return f"Q{q} {today.year} ({labels[q]})"
+
+
 # ---------------------------------------------------------------------------
 # App
 # ---------------------------------------------------------------------------
@@ -317,8 +349,16 @@ with st.sidebar:
         load_facilities.clear()
         st.rerun()
 
-    period = st.text_input("Reporting period (e.g. 2026-Q2 or July 2026)",
-                            value=date.today().strftime("%Y-%m"))
+    period_type = st.radio("Reporting period type", ["Month", "Quarter"], horizontal=True)
+    if period_type == "Month":
+        months = month_options()
+        default_idx = months.index(date.today().strftime("%B %Y"))
+        period = st.selectbox("Reporting period", months, index=default_idx)
+    else:
+        quarters = quarter_options()
+        default_idx = quarters.index(current_quarter_label())
+        period = st.selectbox("Reporting period", quarters, index=default_idx)
+
     entered_by = st.text_input("Entered by")
     st.divider()
     nav_options = ["Data entry", "Submission history"]
