@@ -337,8 +337,8 @@ def run_quality_checks(tables: dict, meta: dict):
         txcurr_15plus = txcurr_age.loc[over15_ages, ["Female", "Male"]].values.sum()
 
         mmd = tables[("TX_CURR", "ARV dispensing quantity")]
-        mmd_under15 = mmd.loc[[r for r in mmd.index if "<15yrs" in r], "Total"].values.sum()
-        mmd_15plus = mmd.loc[[r for r in mmd.index if "15+yrs" in r], "Total"].values.sum()
+        mmd_under15 = mmd.loc[[r for r in mmd.index if "<15yrs" in r], ["Female", "Male"]].values.sum()
+        mmd_15plus = mmd.loc[[r for r in mmd.index if "15+yrs" in r], ["Female", "Male"]].values.sum()
 
         if mmd_under15 != txcurr_under15:
             errors.append(
@@ -364,8 +364,8 @@ def run_quality_checks(tables: dict, meta: dict):
         txcurr_15plus = txcurr_age.loc[over15_ages, ["Female", "Male"]].values.sum()
 
         dtg = tables[("TX_CURR", "DTG regimen")]
-        dtg_under15 = dtg.loc["<15yrs", "Total"]
-        dtg_15plus = dtg.loc["15+yrs", "Total"]
+        dtg_under15 = dtg.loc["<15yrs", ["Female", "Male"]].sum()
+        dtg_15plus = dtg.loc["15+yrs", ["Female", "Male"]].sum()
 
         if dtg_under15 > txcurr_under15:
             errors.append(
@@ -600,13 +600,13 @@ with tabs[1]:
     tables[("TX_CURR", "By age and sex")] = entry_grid(
         "txcurr_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
     )
-    st.markdown("**ARV dispensing quantity (Total)**")
+    st.markdown("**ARV dispensing quantity (by sex)**")
     tables[("TX_CURR", "ARV dispensing quantity")] = entry_grid(
-        "txcurr_dispense", TX_CURR_DISPENSING, ["Total"], "Dispensing category"
+        "txcurr_dispense", TX_CURR_DISPENSING, ["Female", "Male"], "Dispensing category"
     )
-    st.markdown("**On DTG-based regimen (Total)**")
+    st.markdown("**On DTG-based regimen (by sex)**")
     tables[("TX_CURR", "DTG regimen")] = entry_grid(
-        "txcurr_dtg", TX_CURR_DTG, ["Total"], "Age/weight band"
+        "txcurr_dtg", TX_CURR_DTG, ["Female", "Male"], "Age/weight band"
     )
 
 with tabs[2]:
@@ -629,9 +629,9 @@ with tabs[4]:
     tables[("TX_RTT", "By age and sex")] = entry_grid(
         "txrtt_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
     )
-    st.markdown("**Duration of treatment interruption before returning (Total)**")
+    st.markdown("**Duration of treatment interruption before returning (by sex)**")
     tables[("TX_RTT", "Duration before returning")] = entry_grid(
-        "txrtt_duration", TX_RTT_DURATION, ["Total"], "Duration"
+        "txrtt_duration", TX_RTT_DURATION, ["Female", "Male"], "Duration"
     )
 
 with tabs[5]:
