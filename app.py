@@ -67,6 +67,12 @@ TX_ML_OUTCOMES = [
     "Refused (Stopped) Treatment",
 ]
 
+IIT_OUTCOMES = [
+    "IIT after <3 months on treatment",
+    "IIT after 3-5 months on treatment",
+    "IIT after >5 months on treatment",
+]
+
 TX_CURR_DISPENSING = [
     "<3 months of ARVs dispensed, <15yrs",
     "<3 months of ARVs dispensed, 15+yrs",
@@ -712,6 +718,35 @@ if nav == "Dashboard":
             )
             fig8.update_layout(xaxis_range=[0, 100])
             st.plotly_chart(fig8, use_container_width=True)
+
+    st.divider()
+    st.markdown("### CIRA \u2014 Cycle of Interruption and Return to ART")
+    st.caption("Compares clients who interrupted treatment (IIT, from TX_ML) against clients who returned to treatment (TX_RTT).")
+
+    iit_trend = (
+        filtered[(filtered["sheet"] == "TX_ML") & (filtered["table_name"].isin(IIT_OUTCOMES))]
+        .groupby("period")["value"].sum().reset_index().rename(columns={"value": "IIT (TX_ML)"})
+    )
+    rtt_trend = (
+        filtered[(filtered["sheet"] == "TX_RTT") & (filtered["table_name"] == "By age and sex")]
+        .groupby("period")["value"].sum().reset_index().rename(columns={"value": "Returned (TX_RTT)"})
+    )
+    cira_trend = pd.merge(iit_trend, rtt_trend, on="period", how="outer").fillna(0)
+
+    iit_total = iit_trend["IIT (TX_ML)"].sum() if not iit_trend.empty else 0
+    rtt_total = rtt_trend["Returned (TX_RTT)"].sum() if not rtt_trend.empty else 0
+    return_rate = (rtt_total / iit_total * 100) if iit_total else 0
+
+    kc1, kc2, kc3 = st.columns(3)
+    kc1.metric("Total IIT (TX_ML)", f"{int(iit_total):,}")
+    kc2.metric("Total Returned (TX_RTT)", f"{int(rtt_total):,}")
+    kc3.metric("Return Rate", f"{return_rate:.0f}%")
+
+    if not cira_trend.empty:
+        cira_melted = cira_trend.melt(id_vars="period", var_name="Metric", value_name="Clients")
+        fig9 = px.line(cira_melted, x="period", y="Clients", color="Metric", markers=True,
+                       title="IIT vs Returned to Treatment, by period")
+        st.plotly_chart(fig9, use_container_width=True)
 
     st.caption(
         "Filters above apply to every chart and KPI on this page. Data refreshes "

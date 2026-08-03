@@ -84,6 +84,9 @@ A **Dashboard** page (visible to all logged-in users) shows:
 - **DTG**: coverage by age group (on DTG vs not), plus overall % on DTG
 - **DSDM**: active clients by service delivery model, plus VL suppression %
   by model
+- **CIRA (Cycle of Interruption and Return to ART)**: compares clients who
+  interrupted treatment (IIT, from TX_ML) against clients who returned to
+  treatment (TX_RTT), trended by period, with a Return Rate KPI
 
 Filters at the top (facility, reporting period) apply to every chart and KPI
 on the page. Data refreshes from the Google Sheet about once a minute.
