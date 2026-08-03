@@ -70,6 +70,19 @@ Opens at `http://localhost:8501`. The first submission will auto-create the
 
 ---
 
+## Dashboard
+
+A **Dashboard** page (visible to all logged-in users) shows:
+- KPIs: TX_CURR, TX_NEW, TX_ML (all outcomes), TX_RTT totals, VL Coverage, VL
+  Suppression \u2014 for the facilities and periods you select
+- TX_CURR trend over time
+- TX_ML broken down by outcome
+- Viral load cascade (Eligible \u2192 Tested \u2192 Suppressed)
+- TX_CURR age/sex population pyramid
+
+Filters at the top (facility, reporting period) apply to every chart and KPI
+on the page. Data refreshes from the Google Sheet about once a minute.
+
 ## How the app works
 
 - **Sign in**: every user needs an account. A `users` tab is auto-created in

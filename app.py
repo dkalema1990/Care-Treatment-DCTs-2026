@@ -25,6 +25,8 @@ from datetime import datetime, date
 
 import gspread
 import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
@@ -227,6 +229,20 @@ def load_entries(submission_id):
     if not df.empty:
         df = df[df["submission_id"] == submission_id]
     return df
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def load_all_data():
+    """All entries joined with their submission's facility/period/etc, for the dashboard."""
+    sh = get_spreadsheet()
+    subs = pd.DataFrame(sh.worksheet("submissions").get_all_records(), columns=SUBMISSIONS_HEADER)
+    entries = pd.DataFrame(sh.worksheet("entries").get_all_records(), columns=ENTRIES_HEADER)
+    if subs.empty or entries.empty:
+        return pd.DataFrame(columns=list(ENTRIES_HEADER) +
+                             ["facility", "org_unit", "period", "entered_by", "submitted_at"])
+    merged = entries.merge(subs, on="submission_id", how="left")
+    merged["value"] = pd.to_numeric(merged["value"], errors="coerce").fillna(0)
+    return merged
 
 
 # ---------------------------------------------------------------------------
@@ -497,10 +513,108 @@ with st.sidebar:
 
     entered_by = st.text_input("Entered by")
     st.divider()
-    nav_options = ["Data entry", "Submission history"]
+    nav_options = ["Data entry", "Dashboard", "Submission history"]
     if st.session_state.auth["role"] == "admin":
         nav_options.append("Manage users")
     nav = st.radio("View", nav_options)
+
+if nav == "Dashboard":
+    st.subheader("Dashboard")
+    data = load_all_data()
+
+    if data.empty:
+        st.info("No submissions yet. Once reports are submitted, this dashboard will populate.")
+        st.stop()
+
+    col_f, col_p = st.columns(2)
+    all_facilities = sorted(data["facility"].dropna().unique().tolist())
+    all_periods = sorted(data["period"].dropna().unique().tolist())
+    facilities_sel = col_f.multiselect("Facility", all_facilities, default=all_facilities)
+    periods_sel = col_p.multiselect("Reporting period", all_periods, default=all_periods)
+
+    filtered = data[data["facility"].isin(facilities_sel) & data["period"].isin(periods_sel)]
+
+    if filtered.empty:
+        st.warning("No data matches the selected filters.")
+        st.stop()
+
+    def total_for(sheet, table_name):
+        subset = filtered[(filtered["sheet"] == sheet) & (filtered["table_name"] == table_name)]
+        return subset["value"].sum()
+
+    txcurr_total = total_for("TX_CURR", "By age and sex")
+    txnew_total = total_for("TX_NEW", "By age and sex")
+    txml_total = total_for("TX_ML", "Combined total (all outcomes) by age and sex")
+    txrtt_total = total_for("TX_RTT", "By age and sex")
+    pvls_eligible = total_for("TX_PVLS", "Eligible")
+    pvls_tested = total_for("TX_PVLS", "Tested")
+    pvls_suppressed = total_for("TX_PVLS", "Suppressed Viral Load")
+    vl_coverage = (pvls_tested / pvls_eligible * 100) if pvls_eligible else 0
+    vl_suppression = (pvls_suppressed / pvls_tested * 100) if pvls_tested else 0
+
+    k1, k2, k3, k4, k5, k6 = st.columns(6)
+    k1.metric("TX_CURR", f"{int(txcurr_total):,}")
+    k2.metric("TX_NEW", f"{int(txnew_total):,}")
+    k3.metric("TX_ML (all outcomes)", f"{int(txml_total):,}")
+    k4.metric("TX_RTT", f"{int(txrtt_total):,}")
+    k5.metric("VL Coverage", f"{vl_coverage:.0f}%")
+    k6.metric("VL Suppression", f"{vl_suppression:.0f}%")
+
+    st.divider()
+
+    c1, c2 = st.columns(2)
+
+    with c1:
+        trend = (
+            filtered[(filtered["sheet"] == "TX_CURR") & (filtered["table_name"] == "By age and sex")]
+            .groupby("period")["value"].sum().reset_index()
+        )
+        if not trend.empty:
+            fig = px.line(trend, x="period", y="value", markers=True,
+                          title="TX_CURR by reporting period")
+            fig.update_layout(yaxis_title="Clients currently on ART", xaxis_title="Period")
+            st.plotly_chart(fig, use_container_width=True)
+
+    with c2:
+        ml_outcomes = (
+            filtered[(filtered["sheet"] == "TX_ML") & (filtered["table_name"].isin(TX_ML_OUTCOMES))]
+            .groupby("table_name")["value"].sum().reset_index()
+        )
+        if not ml_outcomes.empty:
+            fig2 = px.bar(ml_outcomes, x="table_name", y="value", title="TX_ML by outcome")
+            fig2.update_layout(yaxis_title="Clients", xaxis_title="Outcome")
+            st.plotly_chart(fig2, use_container_width=True)
+
+    c3, c4 = st.columns(2)
+
+    with c3:
+        cascade = pd.DataFrame({
+            "Stage": ["Eligible", "Tested", "Suppressed"],
+            "Count": [pvls_eligible, pvls_tested, pvls_suppressed],
+        })
+        fig3 = px.funnel(cascade, x="Count", y="Stage", title="Viral Load Cascade")
+        st.plotly_chart(fig3, use_container_width=True)
+
+    with c4:
+        pyramid = (
+            filtered[(filtered["sheet"] == "TX_CURR") & (filtered["table_name"] == "By age and sex")]
+            .groupby(["row_label", "col_label"])["value"].sum().reset_index()
+        )
+        if not pyramid.empty:
+            pivot = pyramid.pivot(index="row_label", columns="col_label", values="value")
+            pivot = pivot.reindex(AGE_BANDS_15).fillna(0)
+            fig4 = go.Figure()
+            fig4.add_bar(y=pivot.index, x=pivot.get("Female", 0), name="Female", orientation="h")
+            fig4.add_bar(y=pivot.index, x=-pivot.get("Male", 0), name="Male", orientation="h")
+            fig4.update_layout(barmode="relative", title="TX_CURR \u2014 Age/Sex Pyramid",
+                                xaxis_title="Clients")
+            st.plotly_chart(fig4, use_container_width=True)
+
+    st.caption(
+        "Filters above apply to every chart and KPI on this page. Data refreshes "
+        "from the Google Sheet about once a minute."
+    )
+    st.stop()
 
 if nav == "Manage users":
     st.subheader("Manage users")
