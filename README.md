@@ -80,13 +80,16 @@ A **Dashboard** page (visible to all logged-in users) shows:
 - Viral load cascade (Eligible \u2192 Tested \u2192 Suppressed)
 - TX_CURR age/sex population pyramid
 - **MMD**: ARV dispensing duration (<3 / 3-5 / 6+ months) by age group, plus
-  the % of TX_CURR clients on 6+ months MMD
-- **DTG**: coverage by age group (on DTG vs not), plus overall % on DTG
+  the % of TX_CURR clients on 6+ months MMD; also a direct MMD vs TX_CURR
+  comparison by age group and sex
+- **DTG**: coverage by age group (on DTG vs not), plus overall % on DTG; also
+  a direct DTG vs TX_CURR comparison by age group and sex
 - **DSDM**: active clients by service delivery model, plus VL suppression %
   by model
 - **CIRA (Cycle of Interruption and Return to ART)**: compares clients who
   interrupted treatment (IIT, from TX_ML) against clients who returned to
-  treatment (TX_RTT), trended by period, with a Return Rate KPI
+  treatment (TX_RTT) \u2014 trended by period, and broken down by sex and by age
+  band, with a Return Rate KPI
 
 Filters at the top (facility, reporting period) apply to every chart and KPI
 on the page. Data refreshes from the Google Sheet about once a minute.

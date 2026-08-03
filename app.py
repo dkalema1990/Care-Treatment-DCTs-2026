@@ -680,6 +680,65 @@ if nav == "Dashboard":
             pct_dtg = (dtg_total_all / txcurr_total * 100) if txcurr_total else 0
             st.caption(f"**{pct_dtg:.0f}%** of TX_CURR clients are on a DTG-based regimen.")
 
+    c6b1, c6b2 = st.columns(2)
+
+    txcurr_age_df2 = filtered[(filtered["sheet"] == "TX_CURR") &
+                               (filtered["table_name"] == "By age and sex")].copy()
+    if not txcurr_age_df2.empty:
+        txcurr_age_df2["age_group"] = txcurr_age_df2["row_label"].apply(
+            lambda r: "<15yrs" if r in AGE_BANDS_15[:4] else "15+yrs"
+        )
+        txcurr_by_grp_sex = (
+            txcurr_age_df2.groupby(["age_group", "col_label"])["value"].sum()
+            .reset_index().rename(columns={"col_label": "sex"})
+        )
+        txcurr_by_grp_sex["source"] = "TX_CURR"
+
+    with c6b1:
+        mmd_df2 = filtered[(filtered["sheet"] == "TX_CURR") &
+                            (filtered["table_name"] == "ARV dispensing quantity")].copy()
+        if not mmd_df2.empty and not txcurr_age_df2.empty:
+            mmd_df2["age_group"] = mmd_df2["row_label"].apply(
+                lambda r: "<15yrs" if "<15yrs" in r else "15+yrs"
+            )
+            mmd_by_grp_sex = (
+                mmd_df2.groupby(["age_group", "col_label"])["value"].sum()
+                .reset_index().rename(columns={"col_label": "sex"})
+            )
+            mmd_by_grp_sex["source"] = "MMD (dispensed)"
+            compare_mmd = pd.concat([
+                txcurr_by_grp_sex[["age_group", "sex", "value", "source"]],
+                mmd_by_grp_sex[["age_group", "sex", "value", "source"]],
+            ])
+            compare_mmd["group"] = compare_mmd["age_group"] + " \u2014 " + compare_mmd["sex"]
+            fig6b = px.bar(
+                compare_mmd, x="group", y="value", color="source", barmode="group",
+                title="MMD vs TX_CURR, by Age Group and Sex",
+            )
+            fig6b.update_layout(yaxis_title="Clients", xaxis_title="Age group / sex")
+            st.plotly_chart(fig6b, use_container_width=True)
+
+    with c6b2:
+        dtg_df2 = filtered[(filtered["sheet"] == "TX_CURR") &
+                            (filtered["table_name"] == "DTG regimen")].copy()
+        if not dtg_df2.empty and not txcurr_age_df2.empty:
+            dtg_by_grp_sex = (
+                dtg_df2.groupby(["row_label", "col_label"])["value"].sum()
+                .reset_index().rename(columns={"row_label": "age_group", "col_label": "sex"})
+            )
+            dtg_by_grp_sex["source"] = "DTG"
+            compare_dtg = pd.concat([
+                txcurr_by_grp_sex[["age_group", "sex", "value", "source"]],
+                dtg_by_grp_sex[["age_group", "sex", "value", "source"]],
+            ])
+            compare_dtg["group"] = compare_dtg["age_group"] + " \u2014 " + compare_dtg["sex"]
+            fig6c = px.bar(
+                compare_dtg, x="group", y="value", color="source", barmode="group",
+                title="DTG vs TX_CURR, by Age Group and Sex",
+            )
+            fig6c.update_layout(yaxis_title="Clients", xaxis_title="Age group / sex")
+            st.plotly_chart(fig6c, use_container_width=True)
+
     c7, c8 = st.columns(2)
 
     with c7:
@@ -747,6 +806,45 @@ if nav == "Dashboard":
         fig9 = px.line(cira_melted, x="period", y="Clients", color="Metric", markers=True,
                        title="IIT vs Returned to Treatment, by period")
         st.plotly_chart(fig9, use_container_width=True)
+
+    cc1, cc2 = st.columns(2)
+
+    with cc1:
+        iit_by_sex = (
+            filtered[(filtered["sheet"] == "TX_ML") & (filtered["table_name"].isin(IIT_OUTCOMES))]
+            .groupby("col_label")["value"].sum().reset_index()
+            .rename(columns={"col_label": "sex", "value": "IIT (TX_ML)"})
+        )
+        rtt_by_sex = (
+            filtered[(filtered["sheet"] == "TX_RTT") & (filtered["table_name"] == "By age and sex")]
+            .groupby("col_label")["value"].sum().reset_index()
+            .rename(columns={"col_label": "sex", "value": "Returned (TX_RTT)"})
+        )
+        cira_by_sex = pd.merge(iit_by_sex, rtt_by_sex, on="sex", how="outer").fillna(0)
+        if not cira_by_sex.empty:
+            cira_by_sex_melted = cira_by_sex.melt(id_vars="sex", var_name="Metric", value_name="Clients")
+            fig10 = px.bar(cira_by_sex_melted, x="sex", y="Clients", color="Metric", barmode="group",
+                           title="IIT vs Returned to Treatment, by Sex")
+            st.plotly_chart(fig10, use_container_width=True)
+
+    with cc2:
+        iit_by_age = (
+            filtered[(filtered["sheet"] == "TX_ML") & (filtered["table_name"].isin(IIT_OUTCOMES))]
+            .groupby("row_label")["value"].sum().reindex(AGE_BANDS_15).fillna(0).reset_index()
+            .rename(columns={"row_label": "age_band", "value": "IIT (TX_ML)"})
+        )
+        rtt_by_age = (
+            filtered[(filtered["sheet"] == "TX_RTT") & (filtered["table_name"] == "By age and sex")]
+            .groupby("row_label")["value"].sum().reindex(AGE_BANDS_15).fillna(0).reset_index()
+            .rename(columns={"row_label": "age_band", "value": "Returned (TX_RTT)"})
+        )
+        cira_by_age = pd.merge(iit_by_age, rtt_by_age, on="age_band", how="outer").fillna(0)
+        if not cira_by_age.empty:
+            cira_by_age_melted = cira_by_age.melt(id_vars="age_band", var_name="Metric", value_name="Clients")
+            fig11 = px.bar(cira_by_age_melted, x="Clients", y="age_band", color="Metric", barmode="group",
+                           orientation="h", title="IIT vs Returned to Treatment, by Age Band")
+            fig11.update_layout(yaxis={"categoryorder": "array", "categoryarray": AGE_BANDS_15[::-1]})
+            st.plotly_chart(fig11, use_container_width=True)
 
     st.caption(
         "Filters above apply to every chart and KPI on this page. Data refreshes "
