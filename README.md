@@ -79,6 +79,11 @@ A **Dashboard** page (visible to all logged-in users) shows:
 - TX_ML broken down by outcome
 - Viral load cascade (Eligible \u2192 Tested \u2192 Suppressed)
 - TX_CURR age/sex population pyramid
+- **MMD**: ARV dispensing duration (<3 / 3-5 / 6+ months) by age group, plus
+  the % of TX_CURR clients on 6+ months MMD
+- **DTG**: coverage by age group (on DTG vs not), plus overall % on DTG
+- **DSDM**: active clients by service delivery model, plus VL suppression %
+  by model
 
 Filters at the top (facility, reporting period) apply to every chart and KPI
 on the page. Data refreshes from the Google Sheet about once a minute.

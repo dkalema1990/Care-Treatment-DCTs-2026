@@ -610,6 +610,109 @@ if nav == "Dashboard":
                                 xaxis_title="Clients")
             st.plotly_chart(fig4, use_container_width=True)
 
+    st.divider()
+    st.markdown("### MMD, DTG & DSDM")
+
+    c5, c6 = st.columns(2)
+
+    with c5:
+        mmd_df = filtered[(filtered["sheet"] == "TX_CURR") &
+                           (filtered["table_name"] == "ARV dispensing quantity")].copy()
+        if not mmd_df.empty:
+            def mmd_duration(label):
+                if "<3 months" in label:
+                    return "<3 months"
+                if "3-5 months" in label:
+                    return "3-5 months"
+                return "6+ months"
+
+            mmd_df["duration"] = mmd_df["row_label"].apply(mmd_duration)
+            mmd_df["age_group"] = mmd_df["row_label"].apply(
+                lambda r: "<15yrs" if "<15yrs" in r else "15+yrs"
+            )
+            mmd_grouped = mmd_df.groupby(["duration", "age_group"])["value"].sum().reset_index()
+            fig5 = px.bar(
+                mmd_grouped, x="duration", y="value", color="age_group", barmode="group",
+                category_orders={"duration": ["<3 months", "3-5 months", "6+ months"]},
+                title="MMD \u2014 ARV Dispensing Duration",
+            )
+            fig5.update_layout(yaxis_title="Clients", xaxis_title="Dispensing duration")
+            st.plotly_chart(fig5, use_container_width=True)
+
+            mmd_6plus = mmd_grouped.loc[mmd_grouped["duration"] == "6+ months", "value"].sum()
+            pct_6plus = (mmd_6plus / txcurr_total * 100) if txcurr_total else 0
+            st.caption(f"**{pct_6plus:.0f}%** of TX_CURR clients are on 6+ months MMD.")
+
+    with c6:
+        dtg_df = filtered[(filtered["sheet"] == "TX_CURR") &
+                           (filtered["table_name"] == "DTG regimen")].copy()
+        txcurr_age_df = filtered[(filtered["sheet"] == "TX_CURR") &
+                                  (filtered["table_name"] == "By age and sex")].copy()
+        if not dtg_df.empty and not txcurr_age_df.empty:
+            txcurr_age_df["age_group"] = txcurr_age_df["row_label"].apply(
+                lambda r: "<15yrs" if r in AGE_BANDS_15[:4] else "15+yrs"
+            )
+            txcurr_by_group = txcurr_age_df.groupby("age_group")["value"].sum()
+            dtg_by_group = dtg_df.groupby("row_label")["value"].sum()
+
+            compare_rows = []
+            for grp in ["<15yrs", "15+yrs"]:
+                on_dtg = dtg_by_group.get(grp, 0)
+                grp_total = txcurr_by_group.get(grp, 0)
+                compare_rows.append({"age_group": grp, "status": "On DTG", "value": on_dtg})
+                compare_rows.append({"age_group": grp, "status": "Not on DTG",
+                                      "value": max(grp_total - on_dtg, 0)})
+            dtg_compare = pd.DataFrame(compare_rows)
+            fig6 = px.bar(
+                dtg_compare, x="age_group", y="value", color="status", barmode="stack",
+                title="DTG Coverage by Age Group",
+            )
+            fig6.update_layout(yaxis_title="Clients", xaxis_title="Age group")
+            st.plotly_chart(fig6, use_container_width=True)
+
+            dtg_total_all = dtg_df["value"].sum()
+            pct_dtg = (dtg_total_all / txcurr_total * 100) if txcurr_total else 0
+            st.caption(f"**{pct_dtg:.0f}%** of TX_CURR clients are on a DTG-based regimen.")
+
+    c7, c8 = st.columns(2)
+
+    with c7:
+        dsdm_active = filtered[(filtered["sheet"] == "DSDM_VLC-VLS") &
+                                (filtered["table_name"] == "Active on DSD")]
+        if not dsdm_active.empty:
+            active_by_model = (
+                dsdm_active.groupby("col_label")["value"].sum()
+                .reset_index().rename(columns={"col_label": "Model", "value": "Active clients"})
+                .sort_values("Active clients")
+            )
+            fig7 = px.bar(
+                active_by_model, x="Active clients", y="Model", orientation="h",
+                title="Active on DSD by Service Delivery Model",
+            )
+            st.plotly_chart(fig7, use_container_width=True)
+
+    with c8:
+        d_elig = filtered[(filtered["sheet"] == "DSDM_VLC-VLS") & (filtered["table_name"] == "Eligible")]
+        d_test = filtered[(filtered["sheet"] == "DSDM_VLC-VLS") & (filtered["table_name"] == "Tested")]
+        d_supp = filtered[(filtered["sheet"] == "DSDM_VLC-VLS") &
+                           (filtered["table_name"] == "Suppressed Viral Load")]
+        if not d_elig.empty:
+            elig_g = d_elig.groupby("col_label")["value"].sum()
+            test_g = d_test.groupby("col_label")["value"].sum().reindex(elig_g.index).fillna(0)
+            supp_g = d_supp.groupby("col_label")["value"].sum().reindex(elig_g.index).fillna(0)
+            vl_by_model = pd.DataFrame({
+                "Model": elig_g.index, "Tested": test_g.values, "Suppressed": supp_g.values,
+            })
+            vl_by_model["Suppression %"] = vl_by_model.apply(
+                lambda row: (row["Suppressed"] / row["Tested"] * 100) if row["Tested"] else 0, axis=1
+            )
+            fig8 = px.bar(
+                vl_by_model.sort_values("Suppression %"), x="Suppression %", y="Model",
+                orientation="h", title="VL Suppression % by DSD Model",
+            )
+            fig8.update_layout(xaxis_range=[0, 100])
+            st.plotly_chart(fig8, use_container_width=True)
+
     st.caption(
         "Filters above apply to every chart and KPI on this page. Data refreshes "
         "from the Google Sheet about once a minute."
