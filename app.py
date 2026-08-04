@@ -919,18 +919,18 @@ if nav == "Dashboard":
     st.markdown("### CIRA \u2014 Cycle of Interruption and Return to ART")
     st.caption("Compares clients who interrupted treatment (IIT, from TX_ML) against clients who returned to treatment (TX_RTT).")
 
-    iit_trend = (
+    iit_by_facility = (
         filtered[(filtered["sheet"] == "TX_ML") & (filtered["table_name"].isin(IIT_OUTCOMES))]
-        .groupby("period")["value"].sum().reset_index().rename(columns={"value": "IIT (TX_ML)"})
+        .groupby("facility")["value"].sum().reset_index().rename(columns={"value": "IIT (TX_ML)"})
     )
-    rtt_trend = (
+    rtt_by_facility = (
         filtered[(filtered["sheet"] == "TX_RTT") & (filtered["table_name"] == "By age and sex")]
-        .groupby("period")["value"].sum().reset_index().rename(columns={"value": "Returned (TX_RTT)"})
+        .groupby("facility")["value"].sum().reset_index().rename(columns={"value": "Returned (TX_RTT)"})
     )
-    cira_trend = pd.merge(iit_trend, rtt_trend, on="period", how="outer").fillna(0)
+    cira_by_facility = pd.merge(iit_by_facility, rtt_by_facility, on="facility", how="outer").fillna(0)
 
-    iit_total = iit_trend["IIT (TX_ML)"].sum() if not iit_trend.empty else 0
-    rtt_total = rtt_trend["Returned (TX_RTT)"].sum() if not rtt_trend.empty else 0
+    iit_total = iit_by_facility["IIT (TX_ML)"].sum() if not iit_by_facility.empty else 0
+    rtt_total = rtt_by_facility["Returned (TX_RTT)"].sum() if not rtt_by_facility.empty else 0
     return_rate = (rtt_total / iit_total * 100) if iit_total else 0
 
     kc1, kc2, kc3 = st.columns(3)
@@ -938,10 +938,11 @@ if nav == "Dashboard":
     kc2.metric("Total Returned (TX_RTT)", f"{int(rtt_total):,}")
     kc3.metric("Return Rate", f"{return_rate:.0f}%")
 
-    if not cira_trend.empty:
-        cira_melted = cira_trend.melt(id_vars="period", var_name="Metric", value_name="Clients")
-        fig9 = px.line(cira_melted, x="period", y="Clients", color="Metric", markers=True,
-                       title="IIT vs Returned to Treatment, by period")
+    if not cira_by_facility.empty:
+        cira_melted = cira_by_facility.melt(id_vars="facility", var_name="Metric", value_name="Clients")
+        fig9 = px.bar(cira_melted, x="facility", y="Clients", color="Metric", barmode="group",
+                     title="IIT vs Returned to Treatment, by Facility")
+        fig9.update_layout(xaxis_title="Facility")
         st.plotly_chart(fig9, use_container_width=True)
 
     cc1, cc2 = st.columns(2)
