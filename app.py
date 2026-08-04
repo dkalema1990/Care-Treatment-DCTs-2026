@@ -101,7 +101,12 @@ DSDM_MODELS = [
     "Community Retail Pharmacy Drug Distribution Point (CRPDDP)",
 ]
 
-PREP_CATEGORIES = ["Screened", "Eligible", "Initiated", "Currently on PrEP"]
+PREP_CATEGORIES = [
+    "Screened for PREP",
+    "Screened and eligible for PREP",
+    "Screened, eligible and initiated on PREP",
+    "Currently on PREP (PREP_CT)",
+]
 
 SHEETS = ["TX_ML", "TX_CURR", "TX_NEW", "TX_PVLS", "TX_RTT", "DSDM_VLC-VLS", "PREP_BF_PREG"]
 
@@ -353,9 +358,9 @@ def run_quality_checks(tables: dict, meta: dict):
 
     # --- Logical hierarchy: Initiated <= Eligible <= Screened (PREP_BF_PREG) ---
     try:
-        p_screened = tables[("PREP_BF_PREG", "Screened")]
-        p_eligible = tables[("PREP_BF_PREG", "Eligible")]
-        p_initiated = tables[("PREP_BF_PREG", "Initiated")]
+        p_screened = tables[("PREP_BF_PREG", "Screened for PREP")]
+        p_eligible = tables[("PREP_BF_PREG", "Screened and eligible for PREP")]
+        p_initiated = tables[("PREP_BF_PREG", "Screened, eligible and initiated on PREP")]
         for age in p_screened.index:
             for grp in ["Pregnant", "Breastfeeding"]:
                 sc, el, ini = p_screened.loc[age, grp], p_eligible.loc[age, grp], p_initiated.loc[age, grp]
@@ -1016,10 +1021,11 @@ with tabs[5]:
 with tabs[6]:
     st.subheader("PREP_BF_PREG \u2014 PrEP for Pregnant & Breastfeeding Women")
     st.caption("Enter counts by age band, split between pregnant and breastfeeding women.")
-    for cat in PREP_CATEGORIES:
+    for i, cat in enumerate(PREP_CATEGORIES):
         st.markdown(f"**{cat}**")
+        safe_key = f"prep_{i}_" + "".join(ch if ch.isalnum() else "_" for ch in cat)
         tables[("PREP_BF_PREG", cat)] = entry_grid(
-            f"prep_{cat.replace(' ', '_')}", AGE_BANDS_10, ["Pregnant", "Breastfeeding"], "Age band"
+            safe_key, AGE_BANDS_10, ["Pregnant", "Breastfeeding"], "Age band"
         )
 
 st.divider()
