@@ -827,6 +827,55 @@ if nav == "Dashboard":
             "% MMD 6+ months = 6+ months dispensed \u00f7 TX_CURR."
         )
 
+    st.markdown("**MMD Coverage by Facility and Sex**")
+    if not txcurr_totals.empty and not mmd_pivot_df.empty:
+        txcurr_sex_df = filtered[(filtered["sheet"] == "TX_CURR") &
+                                  (filtered["table_name"] == "By age and sex")]
+        txcurr_totals_sex = (
+            txcurr_sex_df.groupby(["facility", "col_label"])["value"].sum().rename("TX_CURR")
+        )
+        mmd_3plus_sex = (
+            mmd_pivot_df[mmd_pivot_df["duration"].isin(["3-5 months", "6+ months"])]
+            .groupby(["facility", "col_label"])["value"].sum().rename("MMD 3+ months")
+        )
+        mmd_6plus_sex = (
+            mmd_pivot_df[mmd_pivot_df["duration"] == "6+ months"]
+            .groupby(["facility", "col_label"])["value"].sum().rename("MMD 6+ months")
+        )
+        pivot_sex = pd.concat([txcurr_totals_sex, mmd_3plus_sex, mmd_6plus_sex], axis=1).fillna(0)
+        pivot_sex["% MMD 3+ months"] = (
+            pivot_sex["MMD 3+ months"] / pivot_sex["TX_CURR"] * 100
+        ).where(pivot_sex["TX_CURR"] > 0, 0).round(1)
+        pivot_sex["% MMD 6+ months"] = (
+            pivot_sex["MMD 6+ months"] / pivot_sex["TX_CURR"] * 100
+        ).where(pivot_sex["TX_CURR"] > 0, 0).round(1)
+        pivot_sex.index.names = ["Facility", "Sex"]
+
+        totals_by_sex = pivot_sex.groupby(level="Sex")[["TX_CURR", "MMD 3+ months", "MMD 6+ months"]].sum()
+        totals_by_sex["% MMD 3+ months"] = (
+            totals_by_sex["MMD 3+ months"] / totals_by_sex["TX_CURR"] * 100
+        ).where(totals_by_sex["TX_CURR"] > 0, 0).round(1)
+        totals_by_sex["% MMD 6+ months"] = (
+            totals_by_sex["MMD 6+ months"] / totals_by_sex["TX_CURR"] * 100
+        ).where(totals_by_sex["TX_CURR"] > 0, 0).round(1)
+        totals_by_sex.index = pd.MultiIndex.from_tuples(
+            [("All facilities (total)", sex) for sex in totals_by_sex.index],
+            names=["Facility", "Sex"],
+        )
+        pivot_sex = pd.concat([pivot_sex, totals_by_sex])
+
+        styler_sex = pivot_sex.style
+        style_fn_sex = styler_sex.map if hasattr(styler_sex, "map") else styler_sex.applymap
+        styled_sex = (
+            style_fn_sex(pct_color, subset=["% MMD 3+ months", "% MMD 6+ months"])
+            .format({
+                "TX_CURR": "{:.0f}", "MMD 3+ months": "{:.0f}", "MMD 6+ months": "{:.0f}",
+                "% MMD 3+ months": "{:.1f}%", "% MMD 6+ months": "{:.1f}%",
+            })
+        )
+        st.dataframe(styled_sex, use_container_width=True)
+        st.caption("Green \u2265 90% \u00b7 Yellow 84\u201390% \u00b7 Red < 84%, same formulas as above, split by sex.")
+
     c7, c8 = st.columns(2)
 
     with c7:

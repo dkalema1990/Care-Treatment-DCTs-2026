@@ -86,6 +86,8 @@ A **Dashboard** page (visible to all logged-in users) shows:
 - **MMD Coverage by Facility**: a color-coded pivot table \u2014 TX_CURR, MMD 3+
   months, MMD 6+ months, and their coverage percentages, per facility (with
   an "All facilities" total row). Green \u2265 90%, yellow 84\u201390%, red < 84%.
+- **MMD Coverage by Facility and Sex**: the same pivot table, broken down by
+  Female/Male within each facility, with per-sex totals across all facilities.
 - **DTG**: coverage by age group (on DTG vs not), plus overall % on DTG; also
   a direct DTG vs TX_CURR comparison by age group and sex
 - **DSDM**: active clients by service delivery model, plus VL suppression %
