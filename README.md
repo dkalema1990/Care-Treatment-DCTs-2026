@@ -1,8 +1,9 @@
 # DCT 2026 Data Collection Tool
 
 A Streamlit web app for entering the ART program indicators from `DCTs_2026.xlsx`:
-**TX_ML, TX_CURR, TX_NEW, TX_PVLS, TX_RTT, and DSDM VLC/VLS**, with the same
-age-band, sex, and category disaggregations as the original workbook.
+**TX_ML, TX_CURR, TX_NEW, TX_PVLS, TX_RTT, DSDM VLC/VLS, and PREP_BF_PREG**,
+with the same age-band, sex, and category disaggregations as the original
+workbook.
 
 Every submission is saved to a **Google Sheet**, so it survives redeploys and
 your team can also open it directly in Sheets if they want.
@@ -146,6 +147,8 @@ On submit, the app validates the entered data before saving:
 - TX_PVLS: Suppressed cannot exceed Tested, and Tested cannot exceed Eligible
   (checked per age band and sex)
 - DSDM VLC/VLS: same Suppressed \u2264 Tested \u2264 Eligible check, per age band and model
+- PREP_BF_PREG: Initiated cannot exceed Eligible, and Eligible cannot exceed
+  Screened, checked per age band and per Pregnant/Breastfeeding group
 
 **Warns, but lets you confirm and submit anyway:**
 - TX_NEW total greater than TX_CURR total (unusual \u2014 newly enrolled clients

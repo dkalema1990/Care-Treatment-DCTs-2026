@@ -101,7 +101,9 @@ DSDM_MODELS = [
     "Community Retail Pharmacy Drug Distribution Point (CRPDDP)",
 ]
 
-SHEETS = ["TX_ML", "TX_CURR", "TX_NEW", "TX_PVLS", "TX_RTT", "DSDM_VLC-VLS"]
+PREP_CATEGORIES = ["Screened", "Eligible", "Initiated", "Currently on PrEP"]
+
+SHEETS = ["TX_ML", "TX_CURR", "TX_NEW", "TX_PVLS", "TX_RTT", "DSDM_VLC-VLS", "PREP_BF_PREG"]
 
 # ---------------------------------------------------------------------------
 # Google Sheets backend
@@ -346,6 +348,21 @@ def run_quality_checks(tables: dict, meta: dict):
                     errors.append(f"DSDM ({model}, {age}): Tested ({t}) exceeds Eligible ({e}).")
                 if s > t:
                     errors.append(f"DSDM ({model}, {age}): Suppressed ({s}) exceeds Tested ({t}).")
+    except KeyError:
+        pass
+
+    # --- Logical hierarchy: Initiated <= Eligible <= Screened (PREP_BF_PREG) ---
+    try:
+        p_screened = tables[("PREP_BF_PREG", "Screened")]
+        p_eligible = tables[("PREP_BF_PREG", "Eligible")]
+        p_initiated = tables[("PREP_BF_PREG", "Initiated")]
+        for age in p_screened.index:
+            for grp in ["Pregnant", "Breastfeeding"]:
+                sc, el, ini = p_screened.loc[age, grp], p_eligible.loc[age, grp], p_initiated.loc[age, grp]
+                if el > sc:
+                    errors.append(f"PREP_BF_PREG ({grp}, {age}): Eligible ({el}) exceeds Screened ({sc}).")
+                if ini > el:
+                    errors.append(f"PREP_BF_PREG ({grp}, {age}): Initiated ({ini}) exceeds Eligible ({el}).")
     except KeyError:
         pass
 
@@ -994,6 +1011,15 @@ with tabs[5]:
         st.markdown(f"**{cat}, by age and model**")
         tables[("DSDM_VLC-VLS", cat)] = entry_grid(
             f"dsdm_{cat.replace(' ', '_')}", AGE_BANDS_10, DSDM_MODELS, "Age band"
+        )
+
+with tabs[6]:
+    st.subheader("PREP_BF_PREG \u2014 PrEP for Pregnant & Breastfeeding Women")
+    st.caption("Enter counts by age band, split between pregnant and breastfeeding women.")
+    for cat in PREP_CATEGORIES:
+        st.markdown(f"**{cat}**")
+        tables[("PREP_BF_PREG", cat)] = entry_grid(
+            f"prep_{cat.replace(' ', '_')}", AGE_BANDS_10, ["Pregnant", "Breastfeeding"], "Age band"
         )
 
 st.divider()
