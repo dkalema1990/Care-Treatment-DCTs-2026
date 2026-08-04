@@ -761,6 +761,72 @@ if nav == "Dashboard":
             fig6c.update_layout(yaxis_title="Clients", xaxis_title="Age group / sex")
             st.plotly_chart(fig6c, use_container_width=True)
 
+    st.markdown("**MMD Coverage by Facility**")
+    txcurr_totals = (
+        filtered[(filtered["sheet"] == "TX_CURR") & (filtered["table_name"] == "By age and sex")]
+        .groupby("facility")["value"].sum().rename("TX_CURR")
+    )
+    mmd_pivot_df = filtered[(filtered["sheet"] == "TX_CURR") &
+                             (filtered["table_name"] == "ARV dispensing quantity")].copy()
+    if not txcurr_totals.empty and not mmd_pivot_df.empty:
+        mmd_pivot_df["duration"] = mmd_pivot_df["row_label"].apply(
+            lambda label: "<3 months" if "<3 months" in label
+            else ("3-5 months" if "3-5 months" in label else "6+ months")
+        )
+        mmd_3plus = (
+            mmd_pivot_df[mmd_pivot_df["duration"].isin(["3-5 months", "6+ months"])]
+            .groupby("facility")["value"].sum().rename("MMD 3+ months")
+        )
+        mmd_6plus = (
+            mmd_pivot_df[mmd_pivot_df["duration"] == "6+ months"]
+            .groupby("facility")["value"].sum().rename("MMD 6+ months")
+        )
+        pivot_table = pd.concat([txcurr_totals, mmd_3plus, mmd_6plus], axis=1).fillna(0)
+        pivot_table["% MMD 3+ months"] = (
+            pivot_table["MMD 3+ months"] / pivot_table["TX_CURR"] * 100
+        ).where(pivot_table["TX_CURR"] > 0, 0).round(1)
+        pivot_table["% MMD 6+ months"] = (
+            pivot_table["MMD 6+ months"] / pivot_table["TX_CURR"] * 100
+        ).where(pivot_table["TX_CURR"] > 0, 0).round(1)
+        pivot_table.index.name = "Facility"
+
+        totals_row = pivot_table[["TX_CURR", "MMD 3+ months", "MMD 6+ months"]].sum()
+        totals_row["% MMD 3+ months"] = (
+            round(totals_row["MMD 3+ months"] / totals_row["TX_CURR"] * 100, 1)
+            if totals_row["TX_CURR"] else 0
+        )
+        totals_row["% MMD 6+ months"] = (
+            round(totals_row["MMD 6+ months"] / totals_row["TX_CURR"] * 100, 1)
+            if totals_row["TX_CURR"] else 0
+        )
+        totals_row.name = "All facilities (total)"
+        pivot_table = pd.concat([pivot_table, totals_row.to_frame().T])
+
+        def pct_color(val):
+            if val >= 90:
+                bg = "#c6efce"  # green
+            elif val >= 84:
+                bg = "#ffeb9c"  # yellow
+            else:
+                bg = "#ffc7ce"  # red
+            return f"background-color: {bg}"
+
+        styler = pivot_table.style
+        style_fn = styler.map if hasattr(styler, "map") else styler.applymap
+        styled = (
+            style_fn(pct_color, subset=["% MMD 3+ months", "% MMD 6+ months"])
+            .format({
+                "TX_CURR": "{:.0f}", "MMD 3+ months": "{:.0f}", "MMD 6+ months": "{:.0f}",
+                "% MMD 3+ months": "{:.1f}%", "% MMD 6+ months": "{:.1f}%",
+            })
+        )
+        st.dataframe(styled, use_container_width=True)
+        st.caption(
+            "Green \u2265 90% \u00b7 Yellow 84\u201390% \u00b7 Red < 84%. "
+            "% MMD 3+ months = (3-5 months + 6+ months dispensed) \u00f7 TX_CURR. "
+            "% MMD 6+ months = 6+ months dispensed \u00f7 TX_CURR."
+        )
+
     c7, c8 = st.columns(2)
 
     with c7:

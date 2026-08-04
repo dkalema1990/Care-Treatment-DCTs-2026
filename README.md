@@ -83,6 +83,9 @@ A **Dashboard** page (visible to all logged-in users) shows:
 - **MMD**: ARV dispensing duration (<3 / 3-5 / 6+ months) by age group, plus
   the % of TX_CURR clients on 6+ months MMD; also a direct MMD vs TX_CURR
   comparison by age group and sex
+- **MMD Coverage by Facility**: a color-coded pivot table \u2014 TX_CURR, MMD 3+
+  months, MMD 6+ months, and their coverage percentages, per facility (with
+  an "All facilities" total row). Green \u2265 90%, yellow 84\u201390%, red < 84%.
 - **DTG**: coverage by age group (on DTG vs not), plus overall % on DTG; also
   a direct DTG vs TX_CURR comparison by age group and sex
 - **DSDM**: active clients by service delivery model, plus VL suppression %
