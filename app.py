@@ -400,8 +400,10 @@ def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, ta
     line (right axis, percent) and a dashed target-rate reference line."""
     return_rate = [(r / i * 100) if i else 0 for i, r in zip(iit_vals, rtt_vals)]
     fig = make_subplots(specs=[[{"secondary_y": True}]])
-    fig.add_bar(x=categories, y=iit_vals, name="IIT (TX_ML)", secondary_y=False)
-    fig.add_bar(x=categories, y=rtt_vals, name="Returned (TX_RTT)", secondary_y=False)
+    fig.add_bar(x=categories, y=iit_vals, name="IIT (TX_ML)", secondary_y=False,
+                text=iit_vals, textposition="outside")
+    fig.add_bar(x=categories, y=rtt_vals, name="Returned (TX_RTT)", secondary_y=False,
+                text=rtt_vals, textposition="outside")
     fig.add_trace(
         go.Scatter(
             x=categories, y=return_rate, mode="lines+markers+text", name="Return Rate %",
@@ -745,8 +747,9 @@ if nav == "Dashboard":
             .groupby("period")["value"].sum().reset_index()
         )
         if not trend.empty:
-            fig = px.line(trend, x="period", y="value", markers=True,
+            fig = px.line(trend, x="period", y="value", markers=True, text="value",
                           title="TX_CURR by reporting period")
+            fig.update_traces(textposition="top center")
             fig.update_layout(yaxis_title="Clients currently on ART", xaxis_title="Period")
             st.plotly_chart(fig, use_container_width=True)
 
@@ -756,7 +759,8 @@ if nav == "Dashboard":
             .groupby("table_name")["value"].sum().reset_index()
         )
         if not ml_outcomes.empty:
-            fig2 = px.bar(ml_outcomes, x="table_name", y="value", title="TX_ML by outcome")
+            fig2 = px.bar(ml_outcomes, x="table_name", y="value", title="TX_ML by outcome",
+                         text_auto=True)
             fig2.update_layout(yaxis_title="Clients", xaxis_title="Outcome")
             st.plotly_chart(fig2, use_container_width=True)
 
@@ -803,9 +807,13 @@ if nav == "Dashboard":
     if not pyramid.empty:
         pivot = pyramid.pivot(index="row_label", columns="col_label", values="value")
         pivot = pivot.reindex(AGE_BANDS_15).fillna(0)
+        female_vals = pivot.get("Female", 0)
+        male_vals = pivot.get("Male", 0)
         fig4 = go.Figure()
-        fig4.add_bar(y=pivot.index, x=pivot.get("Female", 0), name="Female", orientation="h")
-        fig4.add_bar(y=pivot.index, x=-pivot.get("Male", 0), name="Male", orientation="h")
+        fig4.add_bar(y=pivot.index, x=female_vals, name="Female", orientation="h",
+                    text=female_vals, textposition="outside")
+        fig4.add_bar(y=pivot.index, x=-male_vals, name="Male", orientation="h",
+                    text=male_vals, textposition="outside")
         fig4.update_layout(barmode="relative", title="TX_CURR \u2014 Age/Sex Pyramid",
                             xaxis_title="Clients")
         st.plotly_chart(fig4, use_container_width=True)
@@ -834,7 +842,7 @@ if nav == "Dashboard":
             fig5 = px.bar(
                 mmd_grouped, x="duration", y="value", color="age_group", barmode="group",
                 category_orders={"duration": ["<3 months", "3-5 months", "6+ months"]},
-                title="MMD \u2014 ARV Dispensing Duration",
+                title="MMD \u2014 ARV Dispensing Duration", text_auto=True,
             )
             fig5.update_layout(yaxis_title="Clients", xaxis_title="Dispensing duration")
             st.plotly_chart(fig5, use_container_width=True)
@@ -865,7 +873,7 @@ if nav == "Dashboard":
             dtg_compare = pd.DataFrame(compare_rows)
             fig6 = px.bar(
                 dtg_compare, x="age_group", y="value", color="status", barmode="stack",
-                title="DTG Coverage by Age Group",
+                title="DTG Coverage by Age Group", text_auto=True,
             )
             fig6.update_layout(yaxis_title="Clients", xaxis_title="Age group")
             st.plotly_chart(fig6, use_container_width=True)
@@ -907,7 +915,7 @@ if nav == "Dashboard":
             compare_mmd["group"] = compare_mmd["age_group"] + " \u2014 " + compare_mmd["sex"]
             fig6b = px.bar(
                 compare_mmd, x="group", y="value", color="source", barmode="group",
-                title="MMD vs TX_CURR, by Age Group and Sex",
+                title="MMD vs TX_CURR, by Age Group and Sex", text_auto=True,
             )
             fig6b.update_layout(yaxis_title="Clients", xaxis_title="Age group / sex")
             st.plotly_chart(fig6b, use_container_width=True)
@@ -928,7 +936,7 @@ if nav == "Dashboard":
             compare_dtg["group"] = compare_dtg["age_group"] + " \u2014 " + compare_dtg["sex"]
             fig6c = px.bar(
                 compare_dtg, x="group", y="value", color="source", barmode="group",
-                title="DTG vs TX_CURR, by Age Group and Sex",
+                title="DTG vs TX_CURR, by Age Group and Sex", text_auto=True,
             )
             fig6c.update_layout(yaxis_title="Clients", xaxis_title="Age group / sex")
             st.plotly_chart(fig6c, use_container_width=True)
@@ -1042,7 +1050,7 @@ if nav == "Dashboard":
             )
             fig7 = px.bar(
                 active_by_model, x="Active clients", y="Model", orientation="h",
-                title="Active on DSD by Service Delivery Model",
+                title="Active on DSD by Service Delivery Model", text_auto=True,
             )
             st.plotly_chart(fig7, use_container_width=True)
 
@@ -1061,9 +1069,11 @@ if nav == "Dashboard":
             vl_by_model["Suppression %"] = vl_by_model.apply(
                 lambda row: (row["Suppressed"] / row["Tested"] * 100) if row["Tested"] else 0, axis=1
             )
+            vl_by_model_sorted = vl_by_model.sort_values("Suppression %")
             fig8 = px.bar(
-                vl_by_model.sort_values("Suppression %"), x="Suppression %", y="Model",
-                orientation="h", title="VL Suppression % by DSD Model",
+                vl_by_model_sorted, x="Suppression %", y="Model", orientation="h",
+                title="VL Suppression % by DSD Model",
+                text=vl_by_model_sorted["Suppression %"].map(lambda v: f"{v:.0f}%"),
             )
             fig8.update_layout(xaxis_range=[0, 100])
             st.plotly_chart(fig8, use_container_width=True)
