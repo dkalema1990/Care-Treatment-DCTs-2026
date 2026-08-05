@@ -1162,6 +1162,48 @@ if nav == "Dashboard":
             fig11.update_xaxes(categoryorder="array", categoryarray=AGE_BANDS_15)
             st.plotly_chart(fig11, use_container_width=True)
 
+    st.divider()
+    st.markdown("### PrEP Cascade \u2014 Pregnant & Breastfeeding Women")
+
+    prep_df = filtered[filtered["sheet"] == "PREP_BF_PREG"]
+    if not prep_df.empty:
+        prep_by_stage = (
+            prep_df.groupby(["table_name", "col_label"])["value"].sum()
+            .reindex(pd.MultiIndex.from_product([PREP_CATEGORIES, ["Pregnant", "Breastfeeding"]]))
+            .fillna(0)
+        )
+        prep_cascade = prep_by_stage.reset_index()
+        prep_cascade.columns = ["Stage", "Group", "Clients"]
+
+        # Add a Total row (Pregnant + Breastfeeding) per stage
+        totals = prep_cascade.groupby("Stage")["Clients"].sum().reset_index()
+        totals["Group"] = "Total"
+        prep_cascade = pd.concat([prep_cascade, totals], ignore_index=True)
+
+        fig12 = px.bar(
+            prep_cascade, x="Stage", y="Clients", color="Group", barmode="group",
+            category_orders={"Stage": PREP_CATEGORIES, "Group": ["Pregnant", "Breastfeeding", "Total"]},
+            title="PrEP Cascade: Screened \u2192 Eligible \u2192 Initiated \u2192 Currently on PrEP",
+            text_auto=True,
+        )
+        fig12.update_layout(yaxis_title="Clients", xaxis_title="")
+        fig12.update_xaxes(tickangle=-15)
+        st.plotly_chart(fig12, use_container_width=True)
+
+        stage_totals = totals.set_index("Stage")["Clients"]
+        conv_screened_eligible = (
+            round(stage_totals.get(PREP_CATEGORIES[1], 0) / stage_totals.get(PREP_CATEGORIES[0], 0) * 100, 1)
+            if stage_totals.get(PREP_CATEGORIES[0], 0) else 0
+        )
+        conv_eligible_initiated = (
+            round(stage_totals.get(PREP_CATEGORIES[2], 0) / stage_totals.get(PREP_CATEGORIES[1], 0) * 100, 1)
+            if stage_totals.get(PREP_CATEGORIES[1], 0) else 0
+        )
+        st.caption(
+            f"Screened \u2192 Eligible conversion: **{conv_screened_eligible}%** \u00b7 "
+            f"Eligible \u2192 Initiated conversion: **{conv_eligible_initiated}%**"
+        )
+
     st.caption(
         "Filters above apply to every chart and KPI on this page. Data refreshes "
         "from the Google Sheet about once a minute."

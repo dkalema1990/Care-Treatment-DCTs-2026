@@ -101,6 +101,9 @@ A **Dashboard** page (visible to all logged-in users) shows:
   a Proportion of CIRA Returned KPI (TX_RTT \u00f7 IIT \u00d7 100). Each chart also
   plots this rate as a line on a second axis and a dashed 50% target line, so
   you can see at a glance how each facility/sex/age group compares to target.
+- **PrEP Cascade**: Screened \u2192 Eligible \u2192 Initiated \u2192 Currently on PrEP
+  (PREP_CT), grouped by Pregnant, Breastfeeding, and their combined Total,
+  with Screened\u2192Eligible and Eligible\u2192Initiated conversion rates below the chart.
 
 Filters at the top (facility, reporting period) apply to every chart and KPI
 on the page. Data refreshes from the Google Sheet about once a minute.
