@@ -258,12 +258,76 @@ def load_all_data():
     return merged
 
 
+def load_submission_tables(submission_id):
+    """Reshape one submission's flat entry rows back into {(sheet, table_name): DataFrame}
+    for pre-filling the entry grids when editing."""
+    entries = load_entries(submission_id)
+    result = {}
+    if entries.empty:
+        return result
+    for (sheet, table_name), grp in entries.groupby(["sheet", "table_name"]):
+        pivot = grp.pivot_table(index="row_label", columns="col_label", values="value",
+                                 aggfunc="sum", fill_value=0)
+        result[(sheet, table_name)] = pivot
+    return result
+
+
+def update_submission(submission_id, meta, tables):
+    """Overwrite an existing submission in place: same submission_id, new values."""
+    sh = get_spreadsheet()
+
+    subs_ws = sh.worksheet("submissions")
+    subs_df = pd.DataFrame(subs_ws.get_all_records(), columns=SUBMISSIONS_HEADER)
+    subs_df = subs_df[subs_df["submission_id"] != submission_id]
+    new_sub_row = {
+        "submission_id": submission_id,
+        "facility": meta["facility"],
+        "org_unit": meta["org_unit"],
+        "period": meta["period"],
+        "entered_by": meta["entered_by"],
+        "submitted_at": datetime.now().isoformat(timespec="seconds") + " (edited)",
+    }
+    subs_df = pd.concat([subs_df, pd.DataFrame([new_sub_row])], ignore_index=True)
+    subs_ws.clear()
+    subs_ws.append_row(SUBMISSIONS_HEADER)
+    if not subs_df.empty:
+        subs_ws.append_rows(subs_df[SUBMISSIONS_HEADER].values.tolist(), value_input_option="RAW")
+
+    entries_ws = sh.worksheet("entries")
+    entries_df = pd.DataFrame(entries_ws.get_all_records(), columns=ENTRIES_HEADER)
+    entries_df = entries_df[entries_df["submission_id"] != submission_id]
+
+    new_rows = []
+    for (sheet, table_name), df in tables.items():
+        melted = df.reset_index().melt(id_vars=df.index.name or "index",
+                                        var_name="col_label", value_name="value")
+        melted.columns = ["row_label", "col_label", "value"]
+        for _, r in melted.iterrows():
+            new_rows.append({
+                "submission_id": submission_id, "sheet": sheet, "table_name": table_name,
+                "row_label": r["row_label"], "col_label": r["col_label"],
+                "value": float(r["value"]) if pd.notna(r["value"]) else 0.0,
+            })
+    entries_df = pd.concat([entries_df, pd.DataFrame(new_rows)], ignore_index=True)
+    entries_ws.clear()
+    entries_ws.append_row(ENTRIES_HEADER)
+    if not entries_df.empty:
+        entries_ws.append_rows(entries_df[ENTRIES_HEADER].values.tolist(), value_input_option="RAW")
+
+    load_all_data.clear()
+    return submission_id
+
+
 # ---------------------------------------------------------------------------
 # Reusable entry grid
 # ---------------------------------------------------------------------------
 
-def entry_grid(key, rows, columns, index_name="Disaggregation"):
-    df = pd.DataFrame(0, index=rows, columns=columns)
+
+def entry_grid(key, rows, columns, index_name="Disaggregation", initial_data=None):
+    if initial_data is not None and not initial_data.empty:
+        df = initial_data.reindex(index=rows, columns=columns).fillna(0).astype(int)
+    else:
+        df = pd.DataFrame(0, index=rows, columns=columns)
     df.index.name = index_name
     edited = st.data_editor(
         df,
@@ -277,6 +341,21 @@ def entry_grid(key, rows, columns, index_name="Disaggregation"):
         },
     )
     return edited
+
+
+def tracked_entry_grid(tables_dict, sheet, table_name, base_key, rows, columns,
+                        index_name="Disaggregation"):
+    """Wraps entry_grid: in edit mode, gives each widget a submission-specific key
+    and pre-fills it from the loaded submission; also records the result into
+    tables_dict[(sheet, table_name)]."""
+    edit_id = st.session_state.get("editing_submission_id")
+    key = f"{base_key}_edit_{edit_id}" if edit_id else base_key
+    initial = None
+    if edit_id and st.session_state.get("edit_source_tables"):
+        initial = st.session_state.edit_source_tables.get((sheet, table_name))
+    df = entry_grid(key, rows, columns, index_name, initial_data=initial)
+    tables_dict[(sheet, table_name)] = df
+    return df
 
 
 def month_options(years_back=1, years_forward=1):
@@ -469,6 +548,10 @@ except Exception:
 
 if "auth" not in st.session_state:
     st.session_state.auth = None
+if "editing_submission_id" not in st.session_state:
+    st.session_state.editing_submission_id = None
+if "edit_source_tables" not in st.session_state:
+    st.session_state.edit_source_tables = None
 
 if st.session_state.auth is None:
     st.image(LOGO_PATH, width=220)
@@ -505,6 +588,14 @@ with st.sidebar:
         st.rerun()
     st.divider()
 
+    if st.session_state.editing_submission_id:
+        st.info(f"\u270f\ufe0f Editing submission `{st.session_state.editing_submission_id[:8]}`")
+        if st.button("Cancel edit"):
+            st.session_state.editing_submission_id = None
+            st.session_state.edit_source_tables = None
+            st.rerun()
+        st.divider()
+
     st.header("Reporting details")
 
     facilities_df = load_facilities()
@@ -513,11 +604,11 @@ with st.sidebar:
             "No facilities found in the 'facilities' tab of the Google Sheet. "
             "Add rows there (facility_name, org_unit) then hit Refresh."
         )
-        facility = st.text_input("Facility name")
-        org_unit = st.text_input("Org unit / facility code")
+        facility = st.text_input("Facility name", key="facility_text")
+        org_unit = st.text_input("Org unit / facility code", key="org_unit_text")
     else:
         facility = st.selectbox(
-            "Facility name", options=facilities_df["facility_name"].tolist()
+            "Facility name", options=facilities_df["facility_name"].tolist(), key="facility_select"
         )
         matched_unit = facilities_df.loc[
             facilities_df["facility_name"] == facility, "org_unit"
@@ -529,22 +620,23 @@ with st.sidebar:
         load_facilities.clear()
         st.rerun()
 
-    period_type = st.radio("Reporting period type", ["Month", "Quarter"], horizontal=True)
+    period_type = st.radio("Reporting period type", ["Month", "Quarter"],
+                            horizontal=True, key="period_type_radio")
     if period_type == "Month":
         months = month_options()
         default_idx = months.index(date.today().strftime("%B %Y"))
-        period = st.selectbox("Reporting period", months, index=default_idx)
+        period = st.selectbox("Reporting period", months, index=default_idx, key="period_month_select")
     else:
         quarters = quarter_options()
         default_idx = quarters.index(current_quarter_label())
-        period = st.selectbox("Reporting period", quarters, index=default_idx)
+        period = st.selectbox("Reporting period", quarters, index=default_idx, key="period_quarter_select")
 
-    entered_by = st.text_input("Entered by")
+    entered_by = st.text_input("Entered by", key="entered_by_text")
     st.divider()
     nav_options = ["Data entry", "Dashboard", "Submission history"]
     if st.session_state.auth["role"] == "admin":
         nav_options.append("Manage users")
-    nav = st.radio("View", nav_options)
+    nav = st.radio("View", nav_options, key="nav_radio")
 
 if nav == "Dashboard":
     st.subheader("Dashboard")
@@ -1037,12 +1129,42 @@ if nav == "Submission history":
         if chosen:
             detail = load_entries(chosen)
             st.dataframe(detail, use_container_width=True, hide_index=True)
-            st.download_button(
-                "Download this submission as CSV",
-                detail.to_csv(index=False).encode("utf-8"),
-                file_name=f"submission_{chosen[:8]}.csv",
-                mime="text/csv",
-            )
+            col_dl, col_edit = st.columns([1, 1])
+            with col_dl:
+                st.download_button(
+                    "Download this submission as CSV",
+                    detail.to_csv(index=False).encode("utf-8"),
+                    file_name=f"submission_{chosen[:8]}.csv",
+                    mime="text/csv",
+                )
+            with col_edit:
+                if st.button("\u270f\ufe0f Edit this submission", type="primary"):
+                    meta_row = subs.loc[subs.submission_id == chosen].iloc[0]
+
+                    st.session_state.editing_submission_id = chosen
+                    st.session_state.edit_source_tables = load_submission_tables(chosen)
+
+                    # Pre-fill facility, only if it still exists in the current facility list
+                    if not facilities_df.empty and meta_row["facility"] in facilities_df["facility_name"].values:
+                        st.session_state.facility_select = meta_row["facility"]
+                    elif facilities_df.empty:
+                        st.session_state.facility_text = meta_row["facility"]
+                        st.session_state.org_unit_text = meta_row["org_unit"]
+
+                    # Pre-fill period, only if it's still within the dropdown's date range
+                    stored_period = meta_row["period"]
+                    if stored_period.startswith("Q") and "(" in stored_period:
+                        st.session_state.period_type_radio = "Quarter"
+                        if stored_period in quarter_options():
+                            st.session_state.period_quarter_select = stored_period
+                    else:
+                        st.session_state.period_type_radio = "Month"
+                        if stored_period in month_options():
+                            st.session_state.period_month_select = stored_period
+
+                    st.session_state.entered_by_text = meta_row["entered_by"]
+                    st.session_state.nav_radio = "Data entry"
+                    st.rerun()
     st.stop()
 
 # ---- Data entry mode ----
@@ -1059,11 +1181,10 @@ with tabs[0]:
     outcome_tables = {}
     for outcome in TX_ML_OUTCOMES:
         st.markdown(f"**{outcome}**")
-        df = entry_grid(
-            f"txml_{outcome}", AGE_BANDS_15, ["Female", "Male"], "Age band"
+        df = tracked_entry_grid(
+            tables, "TX_ML", outcome, f"txml_{outcome}", AGE_BANDS_15, ["Female", "Male"], "Age band"
         )
         outcome_tables[outcome] = df
-        tables[("TX_ML", outcome)] = df
 
     # Auto-computed: combined total across all outcome sub-categories, by age & sex
     combined = sum(outcome_tables.values())
@@ -1085,53 +1206,57 @@ with tabs[0]:
 with tabs[1]:
     st.subheader("TX_CURR \u2014 Currently on ART")
     st.markdown("**By age and sex**")
-    tables[("TX_CURR", "By age and sex")] = entry_grid(
-        "txcurr_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
+    tracked_entry_grid(
+        tables, "TX_CURR", "By age and sex", "txcurr_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
     )
     st.markdown("**ARV dispensing quantity (by sex)**")
-    tables[("TX_CURR", "ARV dispensing quantity")] = entry_grid(
-        "txcurr_dispense", TX_CURR_DISPENSING, ["Female", "Male"], "Dispensing category"
+    tracked_entry_grid(
+        tables, "TX_CURR", "ARV dispensing quantity", "txcurr_dispense",
+        TX_CURR_DISPENSING, ["Female", "Male"], "Dispensing category"
     )
     st.markdown("**On DTG-based regimen (by sex)**")
-    tables[("TX_CURR", "DTG regimen")] = entry_grid(
-        "txcurr_dtg", TX_CURR_DTG, ["Female", "Male"], "Age/weight band"
+    tracked_entry_grid(
+        tables, "TX_CURR", "DTG regimen", "txcurr_dtg", TX_CURR_DTG, ["Female", "Male"], "Age/weight band"
     )
 
 with tabs[2]:
     st.subheader("TX_NEW \u2014 Newly Enrolled on ART")
-    tables[("TX_NEW", "By age and sex")] = entry_grid(
-        "txnew_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
+    tracked_entry_grid(
+        tables, "TX_NEW", "By age and sex", "txnew_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
     )
 
 with tabs[3]:
     st.subheader("TX_PVLS \u2014 Viral Load Coverage & Suppression")
     for cat in PVLS_CATEGORIES:
         st.markdown(f"**{cat}**")
-        tables[("TX_PVLS", cat)] = entry_grid(
-            f"pvls_{cat.replace(' ', '_')}", AGE_BANDS_10, ["Female", "Male"], "Age band"
+        tracked_entry_grid(
+            tables, "TX_PVLS", cat, f"pvls_{cat.replace(' ', '_')}",
+            AGE_BANDS_10, ["Female", "Male"], "Age band"
         )
 
 with tabs[4]:
     st.subheader("TX_RTT \u2014 Returned to Treatment")
     st.markdown("**By age and sex**")
-    tables[("TX_RTT", "By age and sex")] = entry_grid(
-        "txrtt_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
+    tracked_entry_grid(
+        tables, "TX_RTT", "By age and sex", "txrtt_age", AGE_BANDS_15, ["Female", "Male"], "Age band"
     )
     st.markdown("**Duration of treatment interruption before returning (by sex)**")
-    tables[("TX_RTT", "Duration before returning")] = entry_grid(
-        "txrtt_duration", TX_RTT_DURATION, ["Female", "Male"], "Duration"
+    tracked_entry_grid(
+        tables, "TX_RTT", "Duration before returning", "txrtt_duration",
+        TX_RTT_DURATION, ["Female", "Male"], "Duration"
     )
 
 with tabs[5]:
     st.subheader("DSDM VLC/VLS \u2014 Differentiated Service Delivery Models")
     st.markdown("**Active on DSD, by age and model**")
-    tables[("DSDM_VLC-VLS", "Active on DSD")] = entry_grid(
-        "dsdm_active", AGE_BANDS_10, DSDM_MODELS, "Age band"
+    tracked_entry_grid(
+        tables, "DSDM_VLC-VLS", "Active on DSD", "dsdm_active", AGE_BANDS_10, DSDM_MODELS, "Age band"
     )
     for cat in PVLS_CATEGORIES:
         st.markdown(f"**{cat}, by age and model**")
-        tables[("DSDM_VLC-VLS", cat)] = entry_grid(
-            f"dsdm_{cat.replace(' ', '_')}", AGE_BANDS_10, DSDM_MODELS, "Age band"
+        tracked_entry_grid(
+            tables, "DSDM_VLC-VLS", cat, f"dsdm_{cat.replace(' ', '_')}",
+            AGE_BANDS_10, DSDM_MODELS, "Age band"
         )
 
 with tabs[6]:
@@ -1140,14 +1265,18 @@ with tabs[6]:
     for i, cat in enumerate(PREP_CATEGORIES):
         st.markdown(f"**{cat}**")
         safe_key = f"prep_{i}_" + "".join(ch if ch.isalnum() else "_" for ch in cat)
-        tables[("PREP_BF_PREG", cat)] = entry_grid(
-            safe_key, AGE_BANDS_10, ["Pregnant", "Breastfeeding"], "Age band"
+        tracked_entry_grid(
+            tables, "PREP_BF_PREG", cat, safe_key, AGE_BANDS_10, ["Pregnant", "Breastfeeding"], "Age band"
         )
 
 st.divider()
+is_editing = bool(st.session_state.editing_submission_id)
 col1, col2 = st.columns([1, 3])
 with col1:
-    submit = st.button("Submit report", type="primary", use_container_width=True)
+    submit = st.button(
+        "Update report" if is_editing else "Submit report",
+        type="primary", use_container_width=True,
+    )
 
 meta = {
     "facility": facility,
@@ -1155,6 +1284,18 @@ meta = {
     "period": period,
     "entered_by": entered_by,
 }
+
+
+def _save_or_update(meta, tables):
+    if st.session_state.editing_submission_id:
+        sub_id = update_submission(st.session_state.editing_submission_id, meta, tables)
+        st.session_state.editing_submission_id = None
+        st.session_state.edit_source_tables = None
+        return sub_id, "updated"
+    else:
+        sub_id = save_submission(meta, tables)
+        return sub_id, "submitted"
+
 
 if submit:
     errors, warnings = run_quality_checks(tables, meta)
@@ -1169,13 +1310,13 @@ if submit:
         for w in warnings:
             st.markdown(f"- \u26a0\ufe0f {w}")
     else:
-        sub_id = save_submission(meta, tables)
-        st.success(f"Report submitted and saved (ID: {sub_id[:8]}).")
+        sub_id, verb = _save_or_update(meta, tables)
+        st.success(f"Report {verb} and saved (ID: {sub_id[:8]}).")
         st.session_state.pending_submission = None
 
 if st.session_state.get("pending_submission"):
     if st.button("Submit anyway, I've reviewed the warnings above", use_container_width=True):
         pending = st.session_state.pending_submission
-        sub_id = save_submission(pending["meta"], pending["tables"])
-        st.success(f"Report submitted and saved (ID: {sub_id[:8]}).")
+        sub_id, verb = _save_or_update(pending["meta"], pending["tables"])
+        st.success(f"Report {verb} and saved (ID: {sub_id[:8]}).")
         st.session_state.pending_submission = None

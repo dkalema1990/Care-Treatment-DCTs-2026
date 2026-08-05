@@ -126,8 +126,11 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   spreadsheet-style grid.
 - **Submit report**: writes one row to the `submissions` tab and one row per
   data point to the `entries` tab in your Google Sheet.
-- **Submission history**: browse past submissions, inspect full detail, and
-  download any submission as CSV.
+- **Submission history**: browse past submissions, inspect full detail,
+  download any submission as CSV, or click **Edit this submission** to load
+  it back into the entry grids, change values, and save it in place (same
+  submission ID, updated data \u2014 not a duplicate). A banner and "Cancel edit"
+  button appear in the sidebar while editing.
 
 ## Files
 
