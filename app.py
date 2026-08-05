@@ -396,8 +396,9 @@ def current_quarter_label():
 # ---------------------------------------------------------------------------
 
 def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, target_pct=50):
-    """Grouped bar of IIT vs Returned (left axis, counts) plus a Return Rate %
-    line (right axis, percent) and a dashed target-rate reference line."""
+    """Grouped bar of IIT vs Returned (left axis, counts) plus a Proportion of
+    CIRA Returned line (right axis, percent = TX_RTT / IIT * 100) and a dashed
+    target-rate reference line."""
     return_rate = [(r / i * 100) if i else 0 for i, r in zip(iit_vals, rtt_vals)]
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_bar(x=categories, y=iit_vals, name="IIT (TX_ML)", secondary_y=False,
@@ -406,11 +407,10 @@ def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, ta
                 text=rtt_vals, textposition="outside")
     fig.add_trace(
         go.Scatter(
-            x=categories, y=return_rate, mode="lines+markers+text", name="Return Rate %",
+            x=categories, y=return_rate, mode="markers+text", name="Proportion of CIRA Returned",
             text=[f"{r:.0f}%" for r in return_rate], textposition="top center",
             textfont=dict(color="#8B00FF", size=13),
-            line=dict(color="#8B00FF", width=4, dash="solid"),
-            marker=dict(color="#8B00FF", size=11, symbol="diamond",
+            marker=dict(color="#8B00FF", size=14, symbol="diamond",
                         line=dict(color="white", width=1.5)),
         ),
         secondary_y=True,
@@ -422,7 +422,7 @@ def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, ta
     )
     fig.update_layout(title=title, barmode="group", xaxis_title=xaxis_title, legend_title_text="")
     fig.update_yaxes(title_text="Clients", secondary_y=False)
-    fig.update_yaxes(title_text="Return Rate (%)", secondary_y=True, range=[0, 110])
+    fig.update_yaxes(title_text="Proportion of CIRA Returned (%)", secondary_y=True, range=[0, 110])
     return fig
 
 
@@ -1103,7 +1103,7 @@ if nav == "Dashboard":
     kc1, kc2, kc3 = st.columns(3)
     kc1.metric("Total IIT (TX_ML)", f"{int(iit_total):,}")
     kc2.metric("Total Returned (TX_RTT)", f"{int(rtt_total):,}")
-    kc3.metric("Return Rate", f"{return_rate:.0f}%")
+    kc3.metric("Proportion of CIRA Returned", f"{return_rate:.0f}%")
 
     if not cira_by_facility.empty:
         fig9 = iit_vs_returned_chart(

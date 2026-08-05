@@ -98,9 +98,9 @@ A **Dashboard** page (visible to all logged-in users) shows:
 - **CIRA (Cycle of Interruption and Return to ART)**: compares clients who
   interrupted treatment (IIT, from TX_ML) against clients who returned to
   treatment (TX_RTT) \u2014 broken down by facility, by sex, and by age band, with
-  a Return Rate KPI. Each chart also plots a Return Rate % line on a second
-  axis and a dashed 50% target line, so you can see at a glance how each
-  facility/sex/age group compares to target.
+  a Proportion of CIRA Returned KPI (TX_RTT \u00f7 IIT \u00d7 100). Each chart also
+  plots this rate as a line on a second axis and a dashed 50% target line, so
+  you can see at a glance how each facility/sex/age group compares to target.
 
 Filters at the top (facility, reporting period) apply to every chart and KPI
 on the page. Data refreshes from the Google Sheet about once a minute.
