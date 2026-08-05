@@ -400,6 +400,12 @@ def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, ta
     CIRA Returned line (right axis, percent = TX_RTT / IIT * 100) and a dashed
     target-rate reference line."""
     return_rate = [(r / i * 100) if i else 0 for i, r in zip(iit_vals, rtt_vals)]
+    # Proportion can exceed 100% (e.g. returns this period outnumber this period's
+    # interruptions). Give generous headroom above the highest point so the point
+    # AND its text label both stay clear of the plot's top edge.
+    max_rate = max(return_rate + [target_pct]) if return_rate else target_pct
+    axis_top = max(max_rate * 1.35, target_pct * 1.35, 20)
+
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig.add_bar(x=categories, y=iit_vals, name="IIT (TX_ML)", secondary_y=False,
                 text=iit_vals, textposition="outside")
@@ -410,8 +416,9 @@ def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, ta
             x=categories, y=return_rate, mode="markers+text", name="Proportion of CIRA Returned",
             text=[f"{r:.0f}%" for r in return_rate], textposition="top center",
             textfont=dict(color="#8B00FF", size=13),
-            marker=dict(color="#8B00FF", size=14, symbol="diamond",
-                        line=dict(color="white", width=1.5)),
+            marker=dict(color="#8B00FF", size=16, symbol="diamond", opacity=1,
+                        line=dict(color="white", width=2)),
+            cliponaxis=False,
         ),
         secondary_y=True,
     )
@@ -422,7 +429,8 @@ def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, ta
     )
     fig.update_layout(title=title, barmode="group", xaxis_title=xaxis_title, legend_title_text="")
     fig.update_yaxes(title_text="Clients", secondary_y=False)
-    fig.update_yaxes(title_text="Proportion of CIRA Returned (%)", secondary_y=True, range=[0, 110])
+    fig.update_yaxes(title_text="Proportion of CIRA Returned (%)", secondary_y=True,
+                      range=[0, axis_top], rangemode="tozero")
     return fig
 
 
