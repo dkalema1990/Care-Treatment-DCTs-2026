@@ -27,6 +27,7 @@ import gspread
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 from google.oauth2.service_account import Credentials
 
@@ -393,6 +394,31 @@ def current_quarter_label():
 # ---------------------------------------------------------------------------
 # Data quality checks
 # ---------------------------------------------------------------------------
+
+def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, target_pct=50):
+    """Grouped bar of IIT vs Returned (left axis, counts) plus a Return Rate %
+    line (right axis, percent) and a dashed target-rate reference line."""
+    return_rate = [(r / i * 100) if i else 0 for i, r in zip(iit_vals, rtt_vals)]
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+    fig.add_bar(x=categories, y=iit_vals, name="IIT (TX_ML)", secondary_y=False)
+    fig.add_bar(x=categories, y=rtt_vals, name="Returned (TX_RTT)", secondary_y=False)
+    fig.add_trace(
+        go.Scatter(
+            x=categories, y=return_rate, mode="lines+markers+text", name="Return Rate %",
+            text=[f"{r:.0f}%" for r in return_rate], textposition="top center",
+            line=dict(color="black", dash="dot"),
+        ),
+        secondary_y=True,
+    )
+    fig.add_hline(
+        y=target_pct, line_dash="dash", line_color="red", secondary_y=True,
+        annotation_text=f"Target: {target_pct}%", annotation_position="top left",
+    )
+    fig.update_layout(title=title, barmode="group", xaxis_title=xaxis_title)
+    fig.update_yaxes(title_text="Clients", secondary_y=False)
+    fig.update_yaxes(title_text="Return Rate (%)", secondary_y=True, range=[0, 110])
+    return fig
+
 
 def pct_color(val):
     """Green >= 90%, yellow 84-90%, red < 84%. Used to color-code coverage/rate pivot tables."""
@@ -1066,10 +1092,11 @@ if nav == "Dashboard":
     kc3.metric("Return Rate", f"{return_rate:.0f}%")
 
     if not cira_by_facility.empty:
-        cira_melted = cira_by_facility.melt(id_vars="facility", var_name="Metric", value_name="Clients")
-        fig9 = px.bar(cira_melted, x="facility", y="Clients", color="Metric", barmode="group",
-                     title="IIT vs Returned to Treatment, by Facility")
-        fig9.update_layout(xaxis_title="Facility")
+        fig9 = iit_vs_returned_chart(
+            cira_by_facility["facility"], cira_by_facility["IIT (TX_ML)"],
+            cira_by_facility["Returned (TX_RTT)"],
+            "IIT vs Returned to Treatment, by Facility", "Facility",
+        )
         st.plotly_chart(fig9, use_container_width=True)
 
     cc1, cc2 = st.columns(2)
@@ -1087,9 +1114,10 @@ if nav == "Dashboard":
         )
         cira_by_sex = pd.merge(iit_by_sex, rtt_by_sex, on="sex", how="outer").fillna(0)
         if not cira_by_sex.empty:
-            cira_by_sex_melted = cira_by_sex.melt(id_vars="sex", var_name="Metric", value_name="Clients")
-            fig10 = px.bar(cira_by_sex_melted, x="sex", y="Clients", color="Metric", barmode="group",
-                           title="IIT vs Returned to Treatment, by Sex")
+            fig10 = iit_vs_returned_chart(
+                cira_by_sex["sex"], cira_by_sex["IIT (TX_ML)"], cira_by_sex["Returned (TX_RTT)"],
+                "IIT vs Returned to Treatment, by Sex", "Sex",
+            )
             st.plotly_chart(fig10, use_container_width=True)
 
     with cc2:
@@ -1105,10 +1133,11 @@ if nav == "Dashboard":
         )
         cira_by_age = pd.merge(iit_by_age, rtt_by_age, on="age_band", how="outer").fillna(0)
         if not cira_by_age.empty:
-            cira_by_age_melted = cira_by_age.melt(id_vars="age_band", var_name="Metric", value_name="Clients")
-            fig11 = px.bar(cira_by_age_melted, x="Clients", y="age_band", color="Metric", barmode="group",
-                           orientation="h", title="IIT vs Returned to Treatment, by Age Band")
-            fig11.update_layout(yaxis={"categoryorder": "array", "categoryarray": AGE_BANDS_15[::-1]})
+            fig11 = iit_vs_returned_chart(
+                cira_by_age["age_band"], cira_by_age["IIT (TX_ML)"], cira_by_age["Returned (TX_RTT)"],
+                "IIT vs Returned to Treatment, by Age Band", "Age band",
+            )
+            fig11.update_xaxes(categoryorder="array", categoryarray=AGE_BANDS_15)
             st.plotly_chart(fig11, use_container_width=True)
 
     st.caption(
