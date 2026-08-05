@@ -408,15 +408,19 @@ def iit_vs_returned_chart(categories, iit_vals, rtt_vals, title, xaxis_title, ta
         go.Scatter(
             x=categories, y=return_rate, mode="lines+markers+text", name="Return Rate %",
             text=[f"{r:.0f}%" for r in return_rate], textposition="top center",
-            line=dict(color="black", dash="dot"),
+            textfont=dict(color="#8B00FF", size=13),
+            line=dict(color="#8B00FF", width=4, dash="solid"),
+            marker=dict(color="#8B00FF", size=11, symbol="diamond",
+                        line=dict(color="white", width=1.5)),
         ),
         secondary_y=True,
     )
     fig.add_hline(
-        y=target_pct, line_dash="dash", line_color="red", secondary_y=True,
+        y=target_pct, line_dash="dash", line_color="red", line_width=2, secondary_y=True,
         annotation_text=f"Target: {target_pct}%", annotation_position="top left",
+        annotation_font=dict(color="red"),
     )
-    fig.update_layout(title=title, barmode="group", xaxis_title=xaxis_title)
+    fig.update_layout(title=title, barmode="group", xaxis_title=xaxis_title, legend_title_text="")
     fig.update_yaxes(title_text="Clients", secondary_y=False)
     fig.update_yaxes(title_text="Return Rate (%)", secondary_y=True, range=[0, 110])
     return fig
