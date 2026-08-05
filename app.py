@@ -553,6 +553,15 @@ if "editing_submission_id" not in st.session_state:
 if "edit_source_tables" not in st.session_state:
     st.session_state.edit_source_tables = None
 
+# Apply any staged widget values BEFORE those widgets are created this run.
+# (Streamlit forbids writing to a widget's session_state key after that
+# widget has already been instantiated in the same script run, so the Edit
+# button stages values here instead of setting them directly.)
+if st.session_state.get("pending_prefill"):
+    for _k, _v in st.session_state.pending_prefill.items():
+        st.session_state[_k] = _v
+    st.session_state.pending_prefill = None
+
 if st.session_state.auth is None:
     st.image(LOGO_PATH, width=220)
     st.title("DCT 2026 \u2014 Sign in")
@@ -1144,26 +1153,27 @@ if nav == "Submission history":
                     st.session_state.editing_submission_id = chosen
                     st.session_state.edit_source_tables = load_submission_tables(chosen)
 
+                    prefill = {"nav_radio": "Data entry", "entered_by_text": meta_row["entered_by"]}
+
                     # Pre-fill facility, only if it still exists in the current facility list
                     if not facilities_df.empty and meta_row["facility"] in facilities_df["facility_name"].values:
-                        st.session_state.facility_select = meta_row["facility"]
+                        prefill["facility_select"] = meta_row["facility"]
                     elif facilities_df.empty:
-                        st.session_state.facility_text = meta_row["facility"]
-                        st.session_state.org_unit_text = meta_row["org_unit"]
+                        prefill["facility_text"] = meta_row["facility"]
+                        prefill["org_unit_text"] = meta_row["org_unit"]
 
                     # Pre-fill period, only if it's still within the dropdown's date range
                     stored_period = meta_row["period"]
                     if stored_period.startswith("Q") and "(" in stored_period:
-                        st.session_state.period_type_radio = "Quarter"
+                        prefill["period_type_radio"] = "Quarter"
                         if stored_period in quarter_options():
-                            st.session_state.period_quarter_select = stored_period
+                            prefill["period_quarter_select"] = stored_period
                     else:
-                        st.session_state.period_type_radio = "Month"
+                        prefill["period_type_radio"] = "Month"
                         if stored_period in month_options():
-                            st.session_state.period_month_select = stored_period
+                            prefill["period_month_select"] = stored_period
 
-                    st.session_state.entered_by_text = meta_row["entered_by"]
-                    st.session_state.nav_radio = "Data entry"
+                    st.session_state.pending_prefill = prefill
                     st.rerun()
     st.stop()
 
