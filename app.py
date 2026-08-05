@@ -394,6 +394,26 @@ def current_quarter_label():
 # Data quality checks
 # ---------------------------------------------------------------------------
 
+def pct_color(val):
+    """Green >= 90%, yellow 84-90%, red < 84%. Used to color-code coverage/rate pivot tables."""
+    if val >= 90:
+        bg = "#c6efce"  # green
+    elif val >= 84:
+        bg = "#ffeb9c"  # yellow
+    else:
+        bg = "#ffc7ce"  # red
+    return f"background-color: {bg}"
+
+
+def styled_pct_table(df, pct_columns, int_columns):
+    """Apply pct_color to percentage columns and number formatting, version-safe across pandas."""
+    styler = df.style
+    style_fn = styler.map if hasattr(styler, "map") else styler.applymap
+    fmt = {c: "{:.0f}" for c in int_columns}
+    fmt.update({c: "{:.1f}%" for c in pct_columns})
+    return style_fn(pct_color, subset=pct_columns).format(fmt)
+
+
 def run_quality_checks(tables: dict, meta: dict):
     """Returns (errors, warnings). Errors block submission; warnings need confirmation."""
     errors, warnings = [], []
@@ -714,30 +734,55 @@ if nav == "Dashboard":
             fig2.update_layout(yaxis_title="Clients", xaxis_title="Outcome")
             st.plotly_chart(fig2, use_container_width=True)
 
-    c3, c4 = st.columns(2)
+    st.markdown("**Viral Load Cascade by Facility**")
+    vl_elig = filtered[(filtered["sheet"] == "TX_PVLS") & (filtered["table_name"] == "Eligible")]
+    vl_test = filtered[(filtered["sheet"] == "TX_PVLS") & (filtered["table_name"] == "Tested")]
+    vl_supp = filtered[(filtered["sheet"] == "TX_PVLS") & (filtered["table_name"] == "Suppressed Viral Load")]
+    if not vl_elig.empty:
+        elig_by_fac = vl_elig.groupby("facility")["value"].sum().rename("Eligible")
+        test_by_fac = vl_test.groupby("facility")["value"].sum().rename("Tested")
+        supp_by_fac = vl_supp.groupby("facility")["value"].sum().rename("Suppressed")
+        vl_pivot = pd.concat([elig_by_fac, test_by_fac, supp_by_fac], axis=1).fillna(0)
+        vl_pivot["% VL Coverage"] = (
+            vl_pivot["Tested"] / vl_pivot["Eligible"] * 100
+        ).where(vl_pivot["Eligible"] > 0, 0).round(1)
+        vl_pivot["% VL Suppression"] = (
+            vl_pivot["Suppressed"] / vl_pivot["Tested"] * 100
+        ).where(vl_pivot["Tested"] > 0, 0).round(1)
+        vl_pivot.index.name = "Facility"
 
-    with c3:
-        cascade = pd.DataFrame({
-            "Stage": ["Eligible", "Tested", "Suppressed"],
-            "Count": [pvls_eligible, pvls_tested, pvls_suppressed],
-        })
-        fig3 = px.funnel(cascade, x="Count", y="Stage", title="Viral Load Cascade")
-        st.plotly_chart(fig3, use_container_width=True)
-
-    with c4:
-        pyramid = (
-            filtered[(filtered["sheet"] == "TX_CURR") & (filtered["table_name"] == "By age and sex")]
-            .groupby(["row_label", "col_label"])["value"].sum().reset_index()
+        vl_totals = vl_pivot[["Eligible", "Tested", "Suppressed"]].sum()
+        vl_totals["% VL Coverage"] = (
+            round(vl_totals["Tested"] / vl_totals["Eligible"] * 100, 1) if vl_totals["Eligible"] else 0
         )
-        if not pyramid.empty:
-            pivot = pyramid.pivot(index="row_label", columns="col_label", values="value")
-            pivot = pivot.reindex(AGE_BANDS_15).fillna(0)
-            fig4 = go.Figure()
-            fig4.add_bar(y=pivot.index, x=pivot.get("Female", 0), name="Female", orientation="h")
-            fig4.add_bar(y=pivot.index, x=-pivot.get("Male", 0), name="Male", orientation="h")
-            fig4.update_layout(barmode="relative", title="TX_CURR \u2014 Age/Sex Pyramid",
-                                xaxis_title="Clients")
-            st.plotly_chart(fig4, use_container_width=True)
+        vl_totals["% VL Suppression"] = (
+            round(vl_totals["Suppressed"] / vl_totals["Tested"] * 100, 1) if vl_totals["Tested"] else 0
+        )
+        vl_totals.name = "All facilities (total)"
+        vl_pivot = pd.concat([vl_pivot, vl_totals.to_frame().T])
+
+        styled_vl = styled_pct_table(
+            vl_pivot, ["% VL Coverage", "% VL Suppression"], ["Eligible", "Tested", "Suppressed"]
+        )
+        st.dataframe(styled_vl, use_container_width=True)
+        st.caption(
+            "Green \u2265 90% \u00b7 Yellow 84\u201390% \u00b7 Red < 84%. "
+            "% VL Coverage = Tested \u00f7 Eligible. % VL Suppression = Suppressed \u00f7 Tested."
+        )
+
+    pyramid = (
+        filtered[(filtered["sheet"] == "TX_CURR") & (filtered["table_name"] == "By age and sex")]
+        .groupby(["row_label", "col_label"])["value"].sum().reset_index()
+    )
+    if not pyramid.empty:
+        pivot = pyramid.pivot(index="row_label", columns="col_label", values="value")
+        pivot = pivot.reindex(AGE_BANDS_15).fillna(0)
+        fig4 = go.Figure()
+        fig4.add_bar(y=pivot.index, x=pivot.get("Female", 0), name="Female", orientation="h")
+        fig4.add_bar(y=pivot.index, x=-pivot.get("Male", 0), name="Male", orientation="h")
+        fig4.update_layout(barmode="relative", title="TX_CURR \u2014 Age/Sex Pyramid",
+                            xaxis_title="Clients")
+        st.plotly_chart(fig4, use_container_width=True)
 
     st.divider()
     st.markdown("### MMD, DTG & DSDM")
@@ -903,23 +948,9 @@ if nav == "Dashboard":
         totals_row.name = "All facilities (total)"
         pivot_table = pd.concat([pivot_table, totals_row.to_frame().T])
 
-        def pct_color(val):
-            if val >= 90:
-                bg = "#c6efce"  # green
-            elif val >= 84:
-                bg = "#ffeb9c"  # yellow
-            else:
-                bg = "#ffc7ce"  # red
-            return f"background-color: {bg}"
-
-        styler = pivot_table.style
-        style_fn = styler.map if hasattr(styler, "map") else styler.applymap
-        styled = (
-            style_fn(pct_color, subset=["% MMD 3+ months", "% MMD 6+ months"])
-            .format({
-                "TX_CURR": "{:.0f}", "MMD 3+ months": "{:.0f}", "MMD 6+ months": "{:.0f}",
-                "% MMD 3+ months": "{:.1f}%", "% MMD 6+ months": "{:.1f}%",
-            })
+        styled = styled_pct_table(
+            pivot_table, ["% MMD 3+ months", "% MMD 6+ months"],
+            ["TX_CURR", "MMD 3+ months", "MMD 6+ months"],
         )
         st.dataframe(styled, use_container_width=True)
         st.caption(
@@ -965,14 +996,9 @@ if nav == "Dashboard":
         )
         pivot_sex = pd.concat([pivot_sex, totals_by_sex])
 
-        styler_sex = pivot_sex.style
-        style_fn_sex = styler_sex.map if hasattr(styler_sex, "map") else styler_sex.applymap
-        styled_sex = (
-            style_fn_sex(pct_color, subset=["% MMD 3+ months", "% MMD 6+ months"])
-            .format({
-                "TX_CURR": "{:.0f}", "MMD 3+ months": "{:.0f}", "MMD 6+ months": "{:.0f}",
-                "% MMD 3+ months": "{:.1f}%", "% MMD 6+ months": "{:.1f}%",
-            })
+        styled_sex = styled_pct_table(
+            pivot_sex, ["% MMD 3+ months", "% MMD 6+ months"],
+            ["TX_CURR", "MMD 3+ months", "MMD 6+ months"],
         )
         st.dataframe(styled_sex, use_container_width=True)
         st.caption("Green \u2265 90% \u00b7 Yellow 84\u201390% \u00b7 Red < 84%, same formulas as above, split by sex.")

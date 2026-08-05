@@ -78,7 +78,10 @@ A **Dashboard** page (visible to all logged-in users) shows:
   Suppression \u2014 for the facilities and periods you select
 - TX_CURR trend over time
 - TX_ML broken down by outcome
-- Viral load cascade (Eligible \u2192 Tested \u2192 Suppressed)
+- **Viral Load Cascade by Facility**: a color-coded pivot table \u2014 Eligible,
+  Tested, Suppressed, % VL Coverage (Tested \u00f7 Eligible), % VL Suppression
+  (Suppressed \u00f7 Tested), per facility with an "All facilities" total row.
+  Green \u2265 90%, yellow 84\u201390%, red < 84%.
 - TX_CURR age/sex population pyramid
 - **MMD**: ARV dispensing duration (<3 / 3-5 / 6+ months) by age group, plus
   the % of TX_CURR clients on 6+ months MMD; also a direct MMD vs TX_CURR
