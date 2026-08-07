@@ -140,6 +140,23 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   submission ID, updated data \u2014 not a duplicate). A banner and "Cancel edit"
   button appear in the sidebar while editing.
 
+## Keeping the app awake
+
+Streamlit Community Cloud puts free-tier apps to sleep after ~12 hours with
+no visitor traffic. `.github/workflows/keep-alive.yml` runs a script every 6
+hours that opens the app in a headless browser, keeping it awake.
+
+Setup:
+1. Push `.github/workflows/keep-alive.yml` and `scripts/keep_alive.py` to
+   your repo (same as any other file).
+2. In your repo: **Settings → Secrets and variables → Actions →
+   Variables tab → New repository variable**. Name it
+   `STREAMLIT_APP_URL`, value = your app's full URL
+   (e.g. `https://care-treatment-dcts-2026-xxxxx.streamlit.app`).
+3. That's it — it runs automatically on schedule. To confirm it works, go
+   to the **Actions** tab in your repo, select "Keep Streamlit App Awake",
+   and click **Run workflow** to trigger it manually and watch the logs.
+
 ## Files
 
 - `app.py` — the full app
@@ -148,6 +165,9 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   sign-in page, and as the browser tab icon
 - `.streamlit/secrets.toml.example` — template for your Google credentials
   (copy to `secrets.toml` and fill in; never commit the real one)
+- `.github/workflows/keep-alive.yml` — scheduled job that pings the app so
+  it doesn't sleep
+- `scripts/keep_alive.py` — the script that workflow runs
 
 ## Data quality checks
 
