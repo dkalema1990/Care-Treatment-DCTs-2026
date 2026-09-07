@@ -134,11 +134,25 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   spreadsheet-style grid.
 - **Submit report**: writes one row to the `submissions` tab and one row per
   data point to the `entries` tab in your Google Sheet.
-- **Submission history**: browse past submissions, inspect full detail,
-  download any submission as CSV, or click **Edit this submission** to load
-  it back into the entry grids, change values, and save it in place (same
-  submission ID, updated data \u2014 not a duplicate). A banner and "Cancel edit"
-  button appear in the sidebar while editing.
+- **Save as draft**: at any point while filling in a report, click "💾 Save
+  as draft" to save your progress without running any of the data quality
+  checks (drafts are allowed to be incomplete). It's stored the same way as a
+  real submission, just tagged `status = draft`. Repeated draft-saves update
+  the same draft in place rather than creating duplicates.
+- **My Drafts**: lists only *your own* in-progress drafts (matched to your
+  login, not the "Entered by" text field). Click **Continue →** to reload a
+  draft back into the entry grids exactly where you left off. When you're
+  ready, click **Update report** to run the full validation checks and mark
+  it final.
+- Drafts are excluded from the **Dashboard** entirely (incomplete data
+  shouldn't count toward KPIs or charts) and hidden from **Submission
+  history** by default — tick "Also show drafts here" if you want to see them
+  there too.
+- **Submission history**: browse past *final* submissions, inspect full
+  detail, download any submission as CSV, or click **Edit this submission**
+  to load it back into the entry grids, change values, and save it in place
+  (same submission ID, updated data — not a duplicate). A banner and "Cancel
+  edit" button appear in the sidebar while editing.
 
 ## Keeping the app awake
 

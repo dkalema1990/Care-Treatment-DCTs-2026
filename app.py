@@ -37,12 +37,15 @@ SCOPES = [
 ]
 
 SUBMISSIONS_HEADER = ["submission_id", "facility", "org_unit", "period",
-                       "entered_by", "submitted_at"]
+                       "entered_by", "submitted_at", "status", "created_by_username"]
 ENTRIES_HEADER = ["submission_id", "sheet", "table_name", "row_label",
                    "col_label", "value"]
 FACILITIES_HEADER = ["facility_name", "org_unit"]
 USERS_HEADER = ["username", "salt", "password_hash", "full_name", "role"]
 DEFAULT_ADMIN_PASSWORD = "Admin@123"
+
+STATUS_FINAL = "final"
+STATUS_DRAFT = "draft"
 
 # ---------------------------------------------------------------------------
 # Reference lists (mirrors the disaggregations in DCTs_2026.xlsx)
@@ -138,6 +141,13 @@ def init_db():
     if "submissions" not in existing:
         ws = sh.add_worksheet(title="submissions", rows=1000, cols=len(SUBMISSIONS_HEADER))
         ws.append_row(SUBMISSIONS_HEADER)
+    else:
+        # Migrate older sheets: add any new header columns (appended at the end)
+        # without touching existing data rows.
+        ws = sh.worksheet("submissions")
+        current_header = ws.row_values(1)
+        if current_header != SUBMISSIONS_HEADER and current_header == SUBMISSIONS_HEADER[:len(current_header)]:
+            ws.update(range_name="A1", values=[SUBMISSIONS_HEADER])
     if "entries" not in existing:
         ws = sh.add_worksheet(title="entries", rows=5000, cols=len(ENTRIES_HEADER))
         ws.append_row(ENTRIES_HEADER)
@@ -198,10 +208,11 @@ def load_facilities():
     return df
 
 
-def save_submission(meta: dict, tables: dict):
+def save_submission(meta: dict, tables: dict, status: str = STATUS_FINAL):
     """tables: {(sheet, table_name): DataFrame(index=row_label, columns=col_label)}"""
     sh = get_spreadsheet()
     sub_id = str(uuid.uuid4())
+    username = (st.session_state.auth or {}).get("username", "") if hasattr(st, "session_state") else ""
 
     sh.worksheet("submissions").append_row([
         sub_id,
@@ -210,6 +221,8 @@ def save_submission(meta: dict, tables: dict):
         meta["period"],
         meta["entered_by"],
         datetime.now().isoformat(timespec="seconds"),
+        status,
+        username,
     ])
 
     rows = []
@@ -232,6 +245,8 @@ def load_submissions():
     records = sh.worksheet("submissions").get_all_records()
     df = pd.DataFrame(records, columns=SUBMISSIONS_HEADER)
     if not df.empty:
+        df["status"] = df["status"].replace("", pd.NA).fillna(STATUS_FINAL)
+        df["created_by_username"] = df["created_by_username"].fillna("")
         df = df.sort_values("submitted_at", ascending=False)
     return df
 
@@ -247,14 +262,17 @@ def load_entries(submission_id):
 
 @st.cache_data(ttl=60, show_spinner=False)
 def load_all_data():
-    """All entries joined with their submission's facility/period/etc, for the dashboard."""
+    """All entries joined with their submission's facility/period/etc, for the dashboard.
+    Drafts are excluded -- only finalized (validated) submissions count toward KPIs/charts."""
     sh = get_spreadsheet()
     subs = pd.DataFrame(sh.worksheet("submissions").get_all_records(), columns=SUBMISSIONS_HEADER)
     entries = pd.DataFrame(sh.worksheet("entries").get_all_records(), columns=ENTRIES_HEADER)
     if subs.empty or entries.empty:
         return pd.DataFrame(columns=list(ENTRIES_HEADER) +
                              ["facility", "org_unit", "period", "entered_by", "submitted_at"])
-    merged = entries.merge(subs, on="submission_id", how="left")
+    subs["status"] = subs["status"].replace("", pd.NA).fillna(STATUS_FINAL)
+    subs = subs[subs["status"] == STATUS_FINAL]
+    merged = entries.merge(subs, on="submission_id", how="inner")
     merged["value"] = pd.to_numeric(merged["value"], errors="coerce").fillna(0)
     return merged
 
@@ -273,20 +291,26 @@ def load_submission_tables(submission_id):
     return result
 
 
-def update_submission(submission_id, meta, tables):
+def update_submission(submission_id, meta, tables, status: str = STATUS_FINAL):
     """Overwrite an existing submission in place: same submission_id, new values."""
     sh = get_spreadsheet()
 
     subs_ws = sh.worksheet("submissions")
     subs_df = pd.DataFrame(subs_ws.get_all_records(), columns=SUBMISSIONS_HEADER)
+    prior_rows = subs_df[subs_df["submission_id"] == submission_id]
+    prior_username = prior_rows["created_by_username"].iloc[0] if not prior_rows.empty else ""
+    current_username = (st.session_state.auth or {}).get("username", "") if hasattr(st, "session_state") else ""
     subs_df = subs_df[subs_df["submission_id"] != submission_id]
+    suffix = " (draft)" if status == STATUS_DRAFT else " (edited)"
     new_sub_row = {
         "submission_id": submission_id,
         "facility": meta["facility"],
         "org_unit": meta["org_unit"],
         "period": meta["period"],
         "entered_by": meta["entered_by"],
-        "submitted_at": datetime.now().isoformat(timespec="seconds") + " (edited)",
+        "submitted_at": datetime.now().isoformat(timespec="seconds") + suffix,
+        "status": status,
+        "created_by_username": prior_username or current_username,
     }
     subs_df = pd.concat([subs_df, pd.DataFrame([new_sub_row])], ignore_index=True)
     subs_ws.clear()
@@ -610,6 +634,8 @@ if "auth" not in st.session_state:
     st.session_state.auth = None
 if "editing_submission_id" not in st.session_state:
     st.session_state.editing_submission_id = None
+if "editing_status" not in st.session_state:
+    st.session_state.editing_status = None
 if "edit_source_tables" not in st.session_state:
     st.session_state.edit_source_tables = None
 
@@ -658,9 +684,11 @@ with st.sidebar:
     st.divider()
 
     if st.session_state.editing_submission_id:
-        st.info(f"\u270f\ufe0f Editing submission `{st.session_state.editing_submission_id[:8]}`")
+        badge = "draft" if st.session_state.editing_status == STATUS_DRAFT else "submission"
+        st.info(f"\u270f\ufe0f Editing {badge} `{st.session_state.editing_submission_id[:8]}`")
         if st.button("Cancel edit"):
             st.session_state.editing_submission_id = None
+            st.session_state.editing_status = None
             st.session_state.edit_source_tables = None
             st.rerun()
         st.divider()
@@ -702,10 +730,37 @@ with st.sidebar:
 
     entered_by = st.text_input("Entered by", key="entered_by_text")
     st.divider()
-    nav_options = ["Data entry", "Dashboard", "Submission history"]
+    nav_options = ["Data entry", "Dashboard", "My Drafts", "Submission history"]
     if st.session_state.auth["role"] == "admin":
         nav_options.append("Manage users")
     nav = st.radio("View", nav_options, key="nav_radio")
+
+def _start_edit(chosen_id, meta_row, status):
+    st.session_state.editing_submission_id = chosen_id
+    st.session_state.editing_status = status
+    st.session_state.edit_source_tables = load_submission_tables(chosen_id)
+
+    prefill = {"nav_radio": "Data entry", "entered_by_text": meta_row["entered_by"]}
+
+    if not facilities_df.empty and meta_row["facility"] in facilities_df["facility_name"].values:
+        prefill["facility_select"] = meta_row["facility"]
+    elif facilities_df.empty:
+        prefill["facility_text"] = meta_row["facility"]
+        prefill["org_unit_text"] = meta_row["org_unit"]
+
+    stored_period = meta_row["period"]
+    if stored_period.startswith("Q") and "(" in stored_period:
+        prefill["period_type_radio"] = "Quarter"
+        if stored_period in quarter_options():
+            prefill["period_quarter_select"] = stored_period
+    else:
+        prefill["period_type_radio"] = "Month"
+        if stored_period in month_options():
+            prefill["period_month_select"] = stored_period
+
+    st.session_state.pending_prefill = prefill
+    st.rerun()
+
 
 if nav == "Dashboard":
     st.subheader("Dashboard")
@@ -1242,9 +1297,12 @@ if nav == "Manage users":
 
 if nav == "Submission history":
     st.subheader("Past submissions")
-    subs = load_submissions()
+    subs_all = load_submissions()
+    show_drafts_too = st.checkbox("Also show drafts here", value=False)
+    subs = subs_all if show_drafts_too else subs_all[subs_all["status"] == STATUS_FINAL]
+
     if subs.empty:
-        st.info("No submissions yet.")
+        st.info("No submissions yet." if subs_all.empty else "No final submissions yet \u2014 check 'My Drafts' or tick the box above.")
     else:
         st.dataframe(subs, use_container_width=True, hide_index=True)
         chosen = st.selectbox(
@@ -1252,7 +1310,8 @@ if nav == "Submission history":
             subs["submission_id"],
             format_func=lambda sid: f"{sid[:8]} \u2014 "
             f"{subs.loc[subs.submission_id == sid, 'facility'].iloc[0]} "
-            f"({subs.loc[subs.submission_id == sid, 'period'].iloc[0]})",
+            f"({subs.loc[subs.submission_id == sid, 'period'].iloc[0]}) "
+            f"[{subs.loc[subs.submission_id == sid, 'status'].iloc[0]}]",
         )
         if chosen:
             detail = load_entries(chosen)
@@ -1268,32 +1327,30 @@ if nav == "Submission history":
             with col_edit:
                 if st.button("\u270f\ufe0f Edit this submission", type="primary"):
                     meta_row = subs.loc[subs.submission_id == chosen].iloc[0]
+                    _start_edit(chosen, meta_row, meta_row.get("status", STATUS_FINAL) or STATUS_FINAL)
+    st.stop()
 
-                    st.session_state.editing_submission_id = chosen
-                    st.session_state.edit_source_tables = load_submission_tables(chosen)
+if nav == "My Drafts":
+    st.subheader("My Drafts")
+    st.caption("Draft reports you've saved but not yet submitted. Only you can see your own drafts here.")
+    subs_all = load_submissions()
+    my_username = st.session_state.auth["username"]
+    my_drafts = subs_all[
+        (subs_all["status"] == STATUS_DRAFT) & (subs_all["created_by_username"] == my_username)
+    ] if not subs_all.empty else subs_all
 
-                    prefill = {"nav_radio": "Data entry", "entered_by_text": meta_row["entered_by"]}
-
-                    # Pre-fill facility, only if it still exists in the current facility list
-                    if not facilities_df.empty and meta_row["facility"] in facilities_df["facility_name"].values:
-                        prefill["facility_select"] = meta_row["facility"]
-                    elif facilities_df.empty:
-                        prefill["facility_text"] = meta_row["facility"]
-                        prefill["org_unit_text"] = meta_row["org_unit"]
-
-                    # Pre-fill period, only if it's still within the dropdown's date range
-                    stored_period = meta_row["period"]
-                    if stored_period.startswith("Q") and "(" in stored_period:
-                        prefill["period_type_radio"] = "Quarter"
-                        if stored_period in quarter_options():
-                            prefill["period_quarter_select"] = stored_period
-                    else:
-                        prefill["period_type_radio"] = "Month"
-                        if stored_period in month_options():
-                            prefill["period_month_select"] = stored_period
-
-                    st.session_state.pending_prefill = prefill
-                    st.rerun()
+    if my_drafts.empty:
+        st.info("No drafts in progress. Start a report under 'Data entry' and click 'Save as draft' anytime.")
+    else:
+        for _, row in my_drafts.iterrows():
+            with st.container(border=True):
+                c1, c2 = st.columns([3, 1])
+                with c1:
+                    st.markdown(f"**{row['facility']}** \u2014 {row['period']}")
+                    st.caption(f"Last saved: {row['submitted_at']}")
+                with c2:
+                    if st.button("Continue \u2192", key=f"continue_{row['submission_id']}", type="primary"):
+                        _start_edit(row["submission_id"], row, STATUS_DRAFT)
     st.stop()
 
 # ---- Data entry mode ----
@@ -1400,11 +1457,24 @@ with tabs[6]:
 
 st.divider()
 is_editing = bool(st.session_state.editing_submission_id)
-col1, col2 = st.columns([1, 3])
+is_draft = st.session_state.get("editing_status") == STATUS_DRAFT
+col1, col2, col3 = st.columns([1, 1, 2])
 with col1:
     submit = st.button(
         "Update report" if is_editing else "Submit report",
         type="primary", use_container_width=True,
+    )
+with col2:
+    save_draft = st.button("\U0001F4BE Save as draft", use_container_width=True)
+
+if is_editing:
+    st.caption(
+        f"Currently editing a **{'draft' if is_draft else 'final'}** submission "
+        f"(`{st.session_state.editing_submission_id[:8]}`). "
+        + ("Saving as draft again just updates this same draft; clicking "
+           "\"Update report\" will validate it and mark it final."
+           if is_draft else
+           "\"Update report\" saves changes to this final submission.")
     )
 
 meta = {
@@ -1415,16 +1485,31 @@ meta = {
 }
 
 
-def _save_or_update(meta, tables):
+def _save_or_update(meta, tables, status=STATUS_FINAL):
     if st.session_state.editing_submission_id:
-        sub_id = update_submission(st.session_state.editing_submission_id, meta, tables)
-        st.session_state.editing_submission_id = None
-        st.session_state.edit_source_tables = None
-        return sub_id, "updated"
+        sub_id = update_submission(st.session_state.editing_submission_id, meta, tables, status=status)
     else:
-        sub_id = save_submission(meta, tables)
-        return sub_id, "submitted"
+        sub_id = save_submission(meta, tables, status=status)
+    if status == STATUS_DRAFT:
+        # Stay in edit mode on this same draft so further saves update it in
+        # place, instead of creating a new draft every time.
+        st.session_state.editing_submission_id = sub_id
+        st.session_state.editing_status = STATUS_DRAFT
+        st.session_state.edit_source_tables = tables
+        verb = "saved as draft"
+    else:
+        st.session_state.editing_submission_id = None
+        st.session_state.editing_status = None
+        st.session_state.edit_source_tables = None
+        verb = "updated" if is_editing else "submitted"
+    return sub_id, verb
 
+
+if save_draft:
+    # Drafts skip validation entirely -- they're expected to be incomplete.
+    sub_id, verb = _save_or_update(meta, tables, status=STATUS_DRAFT)
+    st.success(f"Draft {verb} (ID: {sub_id[:8]}). Find it later under 'My Drafts'.")
+    st.session_state.pending_submission = None
 
 if submit:
     errors, warnings = run_quality_checks(tables, meta)
@@ -1439,13 +1524,13 @@ if submit:
         for w in warnings:
             st.markdown(f"- \u26a0\ufe0f {w}")
     else:
-        sub_id, verb = _save_or_update(meta, tables)
+        sub_id, verb = _save_or_update(meta, tables, status=STATUS_FINAL)
         st.success(f"Report {verb} and saved (ID: {sub_id[:8]}).")
         st.session_state.pending_submission = None
 
 if st.session_state.get("pending_submission"):
     if st.button("Submit anyway, I've reviewed the warnings above", use_container_width=True):
         pending = st.session_state.pending_submission
-        sub_id, verb = _save_or_update(pending["meta"], pending["tables"])
+        sub_id, verb = _save_or_update(pending["meta"], pending["tables"], status=STATUS_FINAL)
         st.success(f"Report {verb} and saved (ID: {sub_id[:8]}).")
         st.session_state.pending_submission = None
