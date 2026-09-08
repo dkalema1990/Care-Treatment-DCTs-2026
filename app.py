@@ -1357,6 +1357,21 @@ if nav == "My Drafts":
 
 # ---- Data entry mode ----
 
+_missing_fields = []
+if not (facility or "").strip():
+    _missing_fields.append("Facility name")
+if not (period or "").strip():
+    _missing_fields.append("Reporting period")
+if not (entered_by or "").strip():
+    _missing_fields.append("Entered by")
+
+if _missing_fields:
+    st.warning(
+        "\u26a0\ufe0f Please fill in the following in the sidebar before starting data entry: "
+        f"**{', '.join(_missing_fields)}**."
+    )
+    st.stop()
+
 if not st.session_state.editing_submission_id:
     _subs_for_banner = load_submissions()
     _my_drafts_banner = _subs_for_banner[
