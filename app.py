@@ -372,7 +372,8 @@ def tracked_entry_grid(tables_dict, sheet, table_name, base_key, rows, columns,
                         index_name="Disaggregation"):
     """Wraps entry_grid: in edit mode, gives each widget a submission-specific key
     and pre-fills it from the loaded submission; also records the result into
-    tables_dict[(sheet, table_name)]."""
+    tables_dict[(sheet, table_name)] and registers the (sheet, table_name) -> key
+    mapping so the autosave fragment can read current values without a full rerun."""
     edit_id = st.session_state.get("editing_submission_id")
     key = f"{base_key}_edit_{edit_id}" if edit_id else base_key
     initial = None
@@ -380,6 +381,7 @@ def tracked_entry_grid(tables_dict, sheet, table_name, base_key, rows, columns,
         initial = st.session_state.edit_source_tables.get((sheet, table_name))
     df = entry_grid(key, rows, columns, index_name, initial_data=initial)
     tables_dict[(sheet, table_name)] = df
+    st.session_state.setdefault("entry_grid_keys", {})[(sheet, table_name)] = key
     return df
 
 
@@ -1454,6 +1456,64 @@ with tabs[6]:
         tracked_entry_grid(
             tables, "PREP_BF_PREG", cat, safe_key, AGE_BANDS_10, ["Pregnant", "Breastfeeding"], "Age band"
         )
+
+
+@st.fragment(run_every=180)
+def _autosave_fragment():
+    """Silently saves a draft every 3 minutes, without disturbing the rest of
+    the form. Only autosaves brand-new or in-progress drafts -- never
+    silently downgrades an already-final submission back to draft status."""
+    if st.session_state.editing_submission_id and st.session_state.editing_status == STATUS_FINAL:
+        return  # editing a real, finalized submission -- don't auto-draft over it
+
+    key_map = st.session_state.get("entry_grid_keys", {})
+    if not key_map:
+        return
+
+    snapshot = {}
+    for (sheet, table_name), widget_key in key_map.items():
+        val = st.session_state.get(widget_key)
+        if val is not None:
+            snapshot[(sheet, table_name)] = val
+
+    # Recompute TX_ML's derived combined-total table, same as the main form does.
+    outcome_dfs = {o: snapshot[("TX_ML", o)] for o in TX_ML_OUTCOMES if ("TX_ML", o) in snapshot}
+    if len(outcome_dfs) == len(TX_ML_OUTCOMES):
+        combined = sum(outcome_dfs.values())
+        combined.index.name = "Age band"
+        snapshot[("TX_ML", "Combined total (all outcomes) by age and sex")] = combined
+
+    if not snapshot:
+        return
+    total_entered = sum(df.values.sum() for df in snapshot.values())
+    if total_entered <= 0:
+        return  # nothing entered yet, nothing worth saving
+
+    # Skip the write entirely if nothing has changed since the last autosave.
+    snapshot_repr = "|".join(
+        f"{k}:{df.values.tobytes()}" for k, df in sorted(snapshot.items(), key=lambda kv: str(kv[0]))
+    )
+    snapshot_hash = hashlib.sha256(snapshot_repr.encode("utf-8")).hexdigest()
+    if st.session_state.get("last_autosave_hash") == snapshot_hash:
+        return
+
+    draft_meta = {
+        "facility": facility, "org_unit": org_unit, "period": period, "entered_by": entered_by,
+    }
+    if st.session_state.editing_submission_id:
+        sub_id = update_submission(st.session_state.editing_submission_id, draft_meta, snapshot,
+                                    status=STATUS_DRAFT)
+    else:
+        sub_id = save_submission(draft_meta, snapshot, status=STATUS_DRAFT)
+
+    st.session_state.editing_submission_id = sub_id
+    st.session_state.editing_status = STATUS_DRAFT
+    st.session_state.edit_source_tables = snapshot
+    st.session_state.last_autosave_hash = snapshot_hash
+    st.toast(f"Progress auto-saved ({datetime.now().strftime('%H:%M:%S')})", icon="\U0001F4BE")
+
+
+_autosave_fragment()
 
 st.divider()
 is_editing = bool(st.session_state.editing_submission_id)
