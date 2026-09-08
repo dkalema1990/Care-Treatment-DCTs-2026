@@ -136,18 +136,12 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   data point to the `entries` tab in your Google Sheet.
 - **Auto-save**: while on the Data entry page, your progress is silently
   saved as a draft roughly every 3 minutes of active use (checked whenever a
-  cell is edited or a widget changes) \u2014 no button needed. A small
-  "💾 Progress auto-saved" toast confirms each save. It only writes when
-  something actually changed, and never touches an already-final submission
-  (only new/in-progress drafts get auto-saved). This is the main safeguard
-  against losing work if you get logged out from being idle. Note it triggers
+  cell is edited or a widget changes) \u2014 fully automatic, no button to click.
+  A small "💾 Progress auto-saved" toast confirms each save. It only writes
+  when something actually changed, and never touches an already-final
+  submission (only new/in-progress drafts get auto-saved). Note it triggers
   on activity, not a strict background timer \u2014 if you type continuously for
   a while it'll catch up on the next edit past the 3-minute mark.
-- **Save as draft**: at any point while filling in a report, click "💾 Save
-  as draft" to save your progress without running any of the data quality
-  checks (drafts are allowed to be incomplete). It's stored the same way as a
-  real submission, just tagged `status = draft`. Repeated draft-saves update
-  the same draft in place rather than creating duplicates.
 - **My Drafts**: lists only *your own* in-progress drafts (matched to your
   login, not the "Entered by" text field). Click **Continue →** to reload a
   draft back into the entry grids exactly where you left off. When you're

@@ -1342,7 +1342,7 @@ if nav == "My Drafts":
     ] if not subs_all.empty else subs_all
 
     if my_drafts.empty:
-        st.info("No drafts in progress. Start a report under 'Data entry' and click 'Save as draft' anytime.")
+        st.info("No drafts in progress. Start filling in a report under 'Data entry' \u2014 your progress auto-saves as you go.")
     else:
         for _, row in my_drafts.iterrows():
             with st.container(border=True):
@@ -1502,21 +1502,18 @@ _maybe_autosave(tables, facility, org_unit, period, entered_by)
 st.divider()
 is_editing = bool(st.session_state.editing_submission_id)
 is_draft = st.session_state.get("editing_status") == STATUS_DRAFT
-col1, col2, col3 = st.columns([1, 1, 2])
+col1, col2 = st.columns([1, 3])
 with col1:
     submit = st.button(
         "Update report" if is_editing else "Submit report",
         type="primary", use_container_width=True,
     )
-with col2:
-    save_draft = st.button("\U0001F4BE Save as draft", use_container_width=True)
 
 if is_editing:
     st.caption(
         f"Currently editing a **{'draft' if is_draft else 'final'}** submission "
-        f"(`{st.session_state.editing_submission_id[:8]}`). "
-        + ("Saving as draft again just updates this same draft; clicking "
-           "\"Update report\" will validate it and mark it final."
+        f"(`{st.session_state.editing_submission_id[:8]}`), auto-saved as you go. "
+        + ("Clicking \"Update report\" will validate it and mark it final."
            if is_draft else
            "\"Update report\" saves changes to this final submission.")
     )
@@ -1548,12 +1545,6 @@ def _save_or_update(meta, tables, status=STATUS_FINAL):
         verb = "updated" if is_editing else "submitted"
     return sub_id, verb
 
-
-if save_draft:
-    # Drafts skip validation entirely -- they're expected to be incomplete.
-    sub_id, verb = _save_or_update(meta, tables, status=STATUS_DRAFT)
-    st.success(f"Draft {verb} (ID: {sub_id[:8]}). Find it later under 'My Drafts'.")
-    st.session_state.pending_submission = None
 
 if submit:
     errors, warnings = run_quality_checks(tables, meta)
