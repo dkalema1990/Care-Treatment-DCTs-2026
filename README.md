@@ -135,6 +135,7 @@ on the page. Data refreshes from the Google Sheet about once a minute.
 - **Submit report**: writes one row to the `submissions` tab and one row per
   data point to the `entries` tab in your Google Sheet.
 - **Auto-save**: while on the Data entry page, your progress is silently
+<<<<<<< HEAD
   saved as a draft roughly every 3 minutes of active use (checked whenever a
   cell is edited or a widget changes) \u2014 no button needed. A small
   "💾 Progress auto-saved" toast confirms each save. It only writes when
@@ -143,6 +144,13 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   against losing work if you get logged out from being idle. Note it triggers
   on activity, not a strict background timer \u2014 if you type continuously for
   a while it'll catch up on the next edit past the 3-minute mark.
+=======
+  saved as a draft every 3 minutes in the background (no button needed) \u2014
+  a small "💾 Progress auto-saved" toast confirms each save. It only writes
+  when something actually changed, and never touches an already-final
+  submission (only new/in-progress drafts get auto-saved). This is the main
+  safeguard against losing work if you get logged out from being idle.
+>>>>>>> b3b8e5be85521d061a79e56b8873bb3c7554fd5a
 - **Save as draft**: at any point while filling in a report, click "💾 Save
   as draft" to save your progress without running any of the data quality
   checks (drafts are allowed to be incomplete). It's stored the same way as a
