@@ -142,7 +142,12 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   submission (only new/in-progress drafts get auto-saved). Note it triggers
   on activity, not a strict background timer \u2014 if you type continuously for
   a while it'll catch up on the next edit past the 3-minute mark.
-- **My Drafts**: lists only *your own* in-progress drafts (matched to your
+- **Draft banner**: if you have exactly one unfinished draft, a banner at the
+  top of the Data entry page lets you jump straight back into it with one
+  click ("Continue \u2192"). If you have more than one, it tells you the count and
+  links to **My Drafts** instead, so nothing gets missed. The banner only
+  shows when you're not already editing something.
+- **My Drafts**: lists all of *your own* in-progress drafts (matched to your
   login, not the "Entered by" text field). Click **Continue →** to reload a
   draft back into the entry grids exactly where you left off. When you're
   ready, click **Update report** to run the full validation checks and mark

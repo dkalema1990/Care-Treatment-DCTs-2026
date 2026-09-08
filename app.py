@@ -1356,6 +1356,36 @@ if nav == "My Drafts":
     st.stop()
 
 # ---- Data entry mode ----
+
+if not st.session_state.editing_submission_id:
+    _subs_for_banner = load_submissions()
+    _my_drafts_banner = _subs_for_banner[
+        (_subs_for_banner["status"] == STATUS_DRAFT)
+        & (_subs_for_banner["created_by_username"] == st.session_state.auth["username"])
+    ] if not _subs_for_banner.empty else _subs_for_banner
+
+    if len(_my_drafts_banner) == 1:
+        _draft_row = _my_drafts_banner.iloc[0]
+        with st.container(border=True):
+            bc1, bc2 = st.columns([4, 1])
+            with bc1:
+                st.markdown(
+                    f"\U0001F4C4 You have an unfinished draft for **{_draft_row['facility']}** "
+                    f"\u2014 {_draft_row['period']} (last saved {_draft_row['submitted_at']})."
+                )
+            with bc2:
+                if st.button("Continue \u2192", type="primary", use_container_width=True):
+                    _start_edit(_draft_row["submission_id"], _draft_row, STATUS_DRAFT)
+    elif len(_my_drafts_banner) > 1:
+        with st.container(border=True):
+            bc1, bc2 = st.columns([4, 1])
+            with bc1:
+                st.markdown(f"\U0001F4C4 You have **{len(_my_drafts_banner)} unfinished drafts** in progress.")
+            with bc2:
+                if st.button("See My Drafts \u2192", use_container_width=True):
+                    st.session_state.pending_prefill = {"nav_radio": "My Drafts"}
+                    st.rerun()
+
 tabs = st.tabs(SHEETS)
 tables = {}
 
