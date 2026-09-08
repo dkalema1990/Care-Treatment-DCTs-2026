@@ -142,10 +142,12 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   submission (only new/in-progress drafts get auto-saved). Note it triggers
   on activity, not a strict background timer \u2014 if you type continuously for
   a while it'll catch up on the next edit past the 3-minute mark.
-- **Required before entry**: Facility name, Reporting period, and Entered by
-  must all be filled in the sidebar before the data entry tabs will show. If
-  any are missing, a warning flag appears and entry is blocked until they're
-  filled in.
+- **Required before entry**: Facility name and Reporting period both default
+  to an unselected placeholder ("— Select a facility/period —") rather than
+  auto-picking one, so someone has to consciously choose. Along with Entered
+  by, all three must be filled in the sidebar before the data entry tabs will
+  show. If any are missing, a warning flag appears and entry is blocked until
+  they're filled in.
 - **Draft banner**: if you have exactly one unfinished draft, a banner at the
   top of the Data entry page lets you jump straight back into it with one
   click ("Continue \u2192"). If you have more than one, it tells you the count and

@@ -47,6 +47,9 @@ DEFAULT_ADMIN_PASSWORD = "Admin@123"
 STATUS_FINAL = "final"
 STATUS_DRAFT = "draft"
 
+FACILITY_PLACEHOLDER = "\u2014 Select a facility \u2014"
+PERIOD_PLACEHOLDER = "\u2014 Select a period \u2014"
+
 # ---------------------------------------------------------------------------
 # Reference lists (mirrors the disaggregations in DCTs_2026.xlsx)
 # ---------------------------------------------------------------------------
@@ -707,7 +710,9 @@ with st.sidebar:
         org_unit = st.text_input("Org unit / facility code", key="org_unit_text")
     else:
         facility = st.selectbox(
-            "Facility name", options=facilities_df["facility_name"].tolist(), key="facility_select"
+            "Facility name",
+            options=[FACILITY_PLACEHOLDER] + facilities_df["facility_name"].tolist(),
+            key="facility_select",
         )
         matched_unit = facilities_df.loc[
             facilities_df["facility_name"] == facility, "org_unit"
@@ -722,13 +727,11 @@ with st.sidebar:
     period_type = st.radio("Reporting period type", ["Month", "Quarter"],
                             horizontal=True, key="period_type_radio")
     if period_type == "Month":
-        months = month_options()
-        default_idx = months.index(date.today().strftime("%B %Y"))
-        period = st.selectbox("Reporting period", months, index=default_idx, key="period_month_select")
+        months = [PERIOD_PLACEHOLDER] + month_options()
+        period = st.selectbox("Reporting period", months, index=0, key="period_month_select")
     else:
-        quarters = quarter_options()
-        default_idx = quarters.index(current_quarter_label())
-        period = st.selectbox("Reporting period", quarters, index=default_idx, key="period_quarter_select")
+        quarters = [PERIOD_PLACEHOLDER] + quarter_options()
+        period = st.selectbox("Reporting period", quarters, index=0, key="period_quarter_select")
 
     entered_by = st.text_input("Entered by", key="entered_by_text")
     st.divider()
@@ -1358,9 +1361,9 @@ if nav == "My Drafts":
 # ---- Data entry mode ----
 
 _missing_fields = []
-if not (facility or "").strip():
+if not (facility or "").strip() or facility == FACILITY_PLACEHOLDER:
     _missing_fields.append("Facility name")
-if not (period or "").strip():
+if not (period or "").strip() or period == PERIOD_PLACEHOLDER:
     _missing_fields.append("Reporting period")
 if not (entered_by or "").strip():
     _missing_fields.append("Entered by")
