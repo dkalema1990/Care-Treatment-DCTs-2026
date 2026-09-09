@@ -120,8 +120,14 @@ on the page. Data refreshes from the Google Sheet about once a minute.
   default `admin` row from the `users` tab in the Sheet).
 - **Manage users** (admin only): add username/password/full name/role for
   each person who'll enter data. Roles are `user` or `admin` — only admins
-  see the Manage users page. To remove someone's access, delete their row
-  from the `users` tab in the Sheet directly.
+  see the Manage users page. When adding a `user` account, you can optionally
+  restrict them to a single facility: their **Dashboard** will then only ever
+  show that facility's data (the filter is locked, not just defaulted), no
+  matter what other facilities exist in the Sheet. Leave it on
+  "— All facilities —" for people who need to see everything (e.g. program
+  managers). Admins always see every facility regardless of this setting. To
+  remove someone's access or change their facility restriction, edit the
+  `users` tab directly in the Sheet.
 - **Sidebar**: facility name (dropdown, sourced from a `facilities` tab in your
   Google Sheet), org unit code (auto-filled), reporting period, entered by.
 - **Facility list**: the app auto-creates a `facilities` tab in your Sheet the

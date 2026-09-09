@@ -41,7 +41,8 @@ SUBMISSIONS_HEADER = ["submission_id", "facility", "org_unit", "period",
 ENTRIES_HEADER = ["submission_id", "sheet", "table_name", "row_label",
                    "col_label", "value"]
 FACILITIES_HEADER = ["facility_name", "org_unit"]
-USERS_HEADER = ["username", "salt", "password_hash", "full_name", "role"]
+USERS_HEADER = ["username", "salt", "password_hash", "full_name", "role", "facility"]
+ALL_FACILITIES_SENTINEL = "\u2014 All facilities \u2014"
 DEFAULT_ADMIN_PASSWORD = "Admin@123"
 
 STATUS_FINAL = "final"
@@ -162,7 +163,12 @@ def init_db():
         ws = sh.add_worksheet(title="users", rows=200, cols=len(USERS_HEADER))
         ws.append_row(USERS_HEADER)
         salt, pw_hash = hash_password(DEFAULT_ADMIN_PASSWORD)
-        ws.append_row(["admin", salt, pw_hash, "Administrator", "admin"])
+        ws.append_row(["admin", salt, pw_hash, "Administrator", "admin", ""])
+    else:
+        ws = sh.worksheet("users")
+        current_header = ws.row_values(1)
+        if current_header != USERS_HEADER and current_header == USERS_HEADER[:len(current_header)]:
+            ws.update(range_name="A1", values=[USERS_HEADER])
 
 
 def hash_password(password: str, salt: str = None):
@@ -188,14 +194,19 @@ def authenticate(username: str, password: str):
     row = match.iloc[0]
     _, digest = hash_password(password, row["salt"])
     if digest == row["password_hash"]:
-        return {"username": row["username"], "full_name": row["full_name"], "role": row["role"]}
+        fac_val = row.get("facility", "")
+        facility = "" if pd.isna(fac_val) else str(fac_val)
+        return {
+            "username": row["username"], "full_name": row["full_name"], "role": row["role"],
+            "facility": facility,
+        }
     return None
 
 
-def add_user(username: str, password: str, full_name: str, role: str):
+def add_user(username: str, password: str, full_name: str, role: str, facility: str = ""):
     sh = get_spreadsheet()
     salt, pw_hash = hash_password(password)
-    sh.worksheet("users").append_row([username, salt, pw_hash, full_name, role])
+    sh.worksheet("users").append_row([username, salt, pw_hash, full_name, role, facility])
     load_users.clear()
 
 
@@ -775,11 +786,23 @@ if nav == "Dashboard":
         st.info("No submissions yet. Once reports are submitted, this dashboard will populate.")
         st.stop()
 
-    col_f, col_p = st.columns(2)
+    my_facility_restriction = st.session_state.auth.get("facility", "") or ""
+    is_restricted = (st.session_state.auth["role"] != "admin") and bool(my_facility_restriction)
+
     all_facilities = sorted(data["facility"].dropna().unique().tolist())
     all_periods = sorted(data["period"].dropna().unique().tolist())
-    facilities_sel = col_f.multiselect("Facility", all_facilities, default=all_facilities)
-    periods_sel = col_p.multiselect("Reporting period", all_periods, default=all_periods)
+
+    if is_restricted:
+        st.caption(f"\U0001F512 Showing data for **{my_facility_restriction}** only.")
+        facilities_sel = [my_facility_restriction] if my_facility_restriction in all_facilities else []
+        periods_sel = st.multiselect("Reporting period", all_periods, default=all_periods)
+        if not facilities_sel:
+            st.info("No submissions yet for your facility.")
+            st.stop()
+    else:
+        col_f, col_p = st.columns(2)
+        facilities_sel = col_f.multiselect("Facility", all_facilities, default=all_facilities)
+        periods_sel = col_p.multiselect("Reporting period", all_periods, default=all_periods)
 
     filtered = data[data["facility"].isin(facilities_sel) & data["period"].isin(periods_sel)]
 
@@ -1279,6 +1302,13 @@ if nav == "Manage users":
         new_password = col_b.text_input("Temporary password", type="password")
         new_full_name = col_a.text_input("Full name")
         new_role = col_b.selectbox("Role", ["user", "admin"])
+        facility_options = [ALL_FACILITIES_SENTINEL] + facilities_df["facility_name"].tolist()
+        new_facility = st.selectbox(
+            "Restrict Dashboard to a single facility?", facility_options,
+            help="Admins always see every facility regardless of this setting. For 'user' "
+                 "accounts, choosing a specific facility here limits what they see on the "
+                 "Dashboard to just that facility's data.",
+        )
         add_submitted = st.form_submit_button("Add user", type="primary")
     if add_submitted:
         existing_users = load_users()
@@ -1287,16 +1317,18 @@ if nav == "Manage users":
         elif new_username in existing_users["username"].values:
             st.error("That username already exists.")
         else:
-            add_user(new_username, new_password, new_full_name, new_role)
+            facility_to_store = "" if new_facility == ALL_FACILITIES_SENTINEL else new_facility
+            add_user(new_username, new_password, new_full_name, new_role, facility_to_store)
             st.success(f"User '{new_username}' added.")
             st.rerun()
 
     st.markdown("**Existing users**")
-    users_display = load_users()[["username", "full_name", "role"]]
+    users_display = load_users()[["username", "full_name", "role", "facility"]].copy()
+    users_display["facility"] = users_display["facility"].replace("", "(all facilities)")
     st.dataframe(users_display, use_container_width=True, hide_index=True)
     st.caption(
-        "To remove or reset a user, edit the 'users' tab directly in the Google "
-        "Sheet (delete their row to remove access)."
+        "To remove or reset a user, or change their facility restriction, edit the 'users' "
+        "tab directly in the Google Sheet."
     )
     st.stop()
 
